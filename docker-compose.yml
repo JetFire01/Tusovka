@@ -1,0 +1,14 @@
+services:
+  tusovka:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - tusovka-data:/app/data
+    environment:
+      - DATABASE_URL=file:./data/tusovka.db
+      - JWT_SECRET=change-this-to-a-random-string
+    restart: unless-stopped
+
+volumes:
+  tusovka-data:

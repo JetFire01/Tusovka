@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  nickname  String
+  pinHash   String
+  createdAt DateTime @default(now())
+
+  participants Participant[]
+  purchases    Purchase[]
+  claims       Claim[]
+
+  @@unique([nickname, pinHash])
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  startDate   String?
+  endDate     String?
+  numDays     Int      @default(1)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  blocks       Block[]
+  participants Participant[]
+  purchases    Purchase[]
+}
+
+model Participant {
+  id         String @id @default(cuid())
+  eventId    String
+  userId     String
+  attending  String @default("unknown")
+  arrivalDay Int?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  surveyResponses SurveyResponse[]
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+}
+
+model Block {
+  id        String @id @default(cuid())
+  eventId   String
+  type      String
+  title     String
+  config    String @default("{}")
+  sortOrder Int    @default(0)
+  dayIndex  Int?
+
+  event           Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  items           BlockItem[]
+  surveyResponses SurveyResponse[]
+
+  @@index([eventId])
+}
+
+model BlockItem {
+  id      String @id @default(cuid())
+  blockId String
+  name    String
+  data    String @default("{}")
+
+  block  Block   @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  claims Claim[]
+
+  @@index([blockId])
+}
+
+model Claim {
+  id          String @id @default(cuid())
+  blockItemId String
+  userId      String
+  claimType   String
+  data        String @default("{}")
+
+  blockItem BlockItem @relation(fields: [blockItemId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@unique([blockItemId, userId, claimType])
+  @@index([userId])
+}
+
+model SurveyResponse {
+  id            String @id @default(cuid())
+  participantId String
+  blockId       String
+  response      String @default("{}")
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  block       Block       @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, blockId])
+}
+
+model Purchase {
+  id        String   @id @default(cuid())
+  eventId   String
+  buyerId   String
+  category  String
+  item      String
+  amount    Float
+  blockId   String?
+  splitRule String   @default("all")
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  buyer User  @relation(fields: [buyerId], references: [id])
+
+  @@index([eventId])
+}
