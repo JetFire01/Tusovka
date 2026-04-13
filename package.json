@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "setup": "npx prisma generate && npx prisma migrate dev",
-    "dev": "next dev",
+    "setup": "npx prisma generate && npx prisma db push",
+    "dev": "npx prisma generate && npx prisma db push && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
