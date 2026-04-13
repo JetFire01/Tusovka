@@ -50,16 +50,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return true;
   }, []);
 
-  const register = useCallback(async (nickname: string): Promise<AuthUser | null> => {
+  const register = useCallback(async (nickname: string): Promise<{ user?: AuthUser; error?: string }> => {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ nickname }),
     });
 
-    if (!res.ok) return null;
-
     const data = await res.json();
+    if (!res.ok) {
+      return { error: data.error || "Ошибка регистрации" };
+    }
+
     const authUser: AuthUser = {
       userId: data.userId,
       nickname: data.nickname,
@@ -67,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
     setUser(authUser);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
-    return authUser;
+    return { user: authUser };
   }, []);
 
   const logout = useCallback(() => {

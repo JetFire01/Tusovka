@@ -469,9 +469,9 @@ function AuthModal({
       setError(t("auth.min2chars", lang));
       return;
     }
-    const user = await register(nickname.trim());
-    if (user) setNewUser({ nickname: user.nickname, pin: user.pin });
-    else setError(t("auth.registerError", lang));
+    const result = await register(nickname.trim());
+    if (result.user) setNewUser({ nickname: result.user.nickname, pin: result.user.pin });
+    else setError(result.error || t("auth.registerError", lang));
   }
 
   if (newUser) {

@@ -11,7 +11,7 @@ export interface AuthUser {
 interface AuthContextType {
   user: AuthUser | null;
   login: (pin: string) => Promise<boolean>;
-  register: (nickname: string) => Promise<AuthUser | null>;
+  register: (nickname: string) => Promise<{ user?: AuthUser; error?: string }>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -19,7 +19,7 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType>({
   user: null,
   login: async () => false,
-  register: async () => null,
+  register: async () => ({}),
   logout: () => {},
   isLoading: true,
 });
