@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Tabs } from "@/components/ui/Tabs";
+import { useLang, t } from "@/lib/i18n";
 
 export default function EventLayout({
   children,
@@ -11,11 +12,12 @@ export default function EventLayout({
 }) {
   const params = useParams();
   const eventId = params.eventId as string;
+  const { lang } = useLang();
 
   const tabs = [
-    { label: "Статистика", href: `/event/${eventId}/statistics` },
-    { label: "Админка", href: `/event/${eventId}/admin` },
-    { label: "Опросник", href: `/event/${eventId}/survey` },
+    { label: t("tab.statistics", lang), href: `/event/${eventId}/statistics` },
+    { label: t("tab.admin", lang), href: `/event/${eventId}/admin` },
+    { label: t("tab.survey", lang), href: `/event/${eventId}/survey` },
   ];
 
   return (
@@ -26,7 +28,7 @@ export default function EventLayout({
             href="/"
             className="text-accent hover:text-accent-hover transition-colors text-sm"
           >
-            ← Назад
+            {t("common.back", lang)}
           </Link>
           <Tabs tabs={tabs} />
         </div>

@@ -14,8 +14,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as AuthUser;
-        // Validate saved credentials
-        login(parsed.nickname, parsed.pin).then((ok) => {
+        login(parsed.pin).then((ok) => {
           if (!ok) {
             localStorage.removeItem(STORAGE_KEY);
           }
@@ -31,11 +30,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const login = useCallback(async (nickname: string, pin: string): Promise<boolean> => {
+  const login = useCallback(async (pin: string): Promise<boolean> => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nickname, pin }),
+      body: JSON.stringify({ pin }),
     });
 
     if (!res.ok) return false;

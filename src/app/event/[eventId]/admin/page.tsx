@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { BLOCK_TYPES, BlockType, formatDateRu } from "@/lib/blocks";
+import { useLang, t } from "@/lib/i18n";
 
 interface BlockData {
   id: string;
@@ -31,6 +32,7 @@ interface ParticipantInfo {
 export default function AdminPage() {
   const params = useParams();
   const eventId = params.eventId as string;
+  const { lang } = useLang();
   const [blocks, setBlocks] = useState<BlockData[]>([]);
   const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
   const [showAddBlock, setShowAddBlock] = useState(false);
@@ -108,24 +110,33 @@ export default function AdminPage() {
     fetchData();
   }
 
+  async function moveBlock(blockId: string, direction: "up" | "down") {
+    await fetch(`/api/events/${eventId}/blocks`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blockId, direction }),
+    });
+    fetchData();
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Админка</h1>
+        <h1 className="text-2xl font-bold">{t("admin.title", lang)}</h1>
         <Button onClick={() => setShowAddBlock(true)} size="sm">
-          Добавить блок
+          {t("admin.addBlock", lang)}
         </Button>
       </div>
 
       {blocks.length === 0 ? (
         <Card className="text-center py-12">
           <p className="text-text-secondary mb-4">
-            Добавьте блоки для настройки ивента
+            {t("admin.noBlocks", lang)}
           </p>
-          <Button onClick={() => setShowAddBlock(true)}>Добавить блок</Button>
+          <Button onClick={() => setShowAddBlock(true)}>{t("admin.addBlock", lang)}</Button>
         </Card>
       ) : (
-        blocks.map((block) => (
+        blocks.map((block, idx) => (
           <BlockEditor
             key={block.id}
             block={block}
@@ -137,6 +148,8 @@ export default function AdminPage() {
             onDeleteItem={(itemId) => deleteItem(block.id, itemId)}
             onDeleteBlock={() => deleteBlock(block.id)}
             onUpdateConfig={(config) => updateBlockConfig(block.id, config)}
+            onMoveUp={idx > 0 ? () => moveBlock(block.id, "up") : undefined}
+            onMoveDown={idx < blocks.length - 1 ? () => moveBlock(block.id, "down") : undefined}
             editingItem={editingItem}
             setEditingItem={setEditingItem}
           />
@@ -146,7 +159,7 @@ export default function AdminPage() {
       <Modal
         open={showAddBlock}
         onClose={() => setShowAddBlock(false)}
-        title="Добавить блок"
+        title={t("admin.addBlockTitle", lang)}
       >
         <div className="grid grid-cols-2 gap-3">
           {Object.values(BLOCK_TYPES).map((config) => (
@@ -175,6 +188,8 @@ function BlockEditor({
   onDeleteItem,
   onDeleteBlock,
   onUpdateConfig,
+  onMoveUp,
+  onMoveDown,
   editingItem,
   setEditingItem,
 }: {
@@ -185,12 +200,53 @@ function BlockEditor({
   onDeleteItem: (itemId: string) => void;
   onDeleteBlock: () => void;
   onUpdateConfig: (config: Record<string, unknown>) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   editingItem: { blockId: string; item?: ItemData } | null;
   setEditingItem: (v: { blockId: string; item?: ItemData } | null) => void;
 }) {
+  const { lang } = useLang();
   const blockConfig = BLOCK_TYPES[block.type as BlockType];
   const isEditing = editingItem?.blockId === block.id;
   const config = JSON.parse(block.config);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [exportNotice, setExportNotice] = useState(false);
+
+  const hasImportExport = ["food", "day_food", "equipment", "alcohol", "pyrotechnics"].includes(block.type);
+
+  function handleImport() {
+    const lines = importText.split("\n").filter((l) => l.trim());
+    for (const line of lines) {
+      const parts = line.split(" - ").map((p) => p.trim());
+      const name = parts[0];
+      if (!name) continue;
+      const data: Record<string, unknown> = {};
+      if (parts[1]) data.quantity = parts[1];
+      if (parts[2]) {
+        const costStr = parts[2].replace(",", ".");
+        const cost = parseFloat(costStr);
+        if (!isNaN(cost)) data.cost = cost;
+      }
+      if (block.type === "equipment") data.itemMode = "buy";
+      onAddItem(name, data);
+    }
+    setImportText("");
+    setShowImport(false);
+  }
+
+  function handleExport() {
+    const lines = block.items.map((item) => {
+      const d = JSON.parse(item.data);
+      let line = item.name;
+      if (d.quantity) line += ` - ${d.quantity}`;
+      if (d.cost !== undefined && d.cost !== "") line += ` - ${d.cost}`;
+      return line;
+    });
+    navigator.clipboard.writeText(lines.join("\n"));
+    setExportNotice(true);
+    setTimeout(() => setExportNotice(false), 2000);
+  }
 
   // Date & Place block has a special editor
   if (block.type === "date_place") {
@@ -210,20 +266,71 @@ function BlockEditor({
         <div className="flex items-center gap-2">
           <CardTitle>{block.title}</CardTitle>
           <Badge variant="accent">{blockConfig?.label || block.type}</Badge>
+          {exportNotice && (
+            <span className="text-xs text-success font-medium animate-pulse">
+              {t("admin.copied", lang)}
+            </span>
+          )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-1 flex-wrap justify-end items-center">
+          {onMoveUp && (
+            <button onClick={onMoveUp} className="px-1.5 py-1 text-text-secondary hover:text-text-primary transition-colors text-lg leading-none" title="↑">↑</button>
+          )}
+          {onMoveDown && (
+            <button onClick={onMoveDown} className="px-1.5 py-1 text-text-secondary hover:text-text-primary transition-colors text-lg leading-none" title="↓">↓</button>
+          )}
           <Button
             size="sm"
             variant="secondary"
             onClick={() => setEditingItem({ blockId: block.id })}
           >
-            Добавить
+            {t("admin.add", lang)}
           </Button>
+          {hasImportExport && (
+            <>
+              <Button size="sm" variant="ghost" onClick={() => setShowImport(true)}>
+                {t("admin.import", lang)}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={handleExport}>
+                {t("admin.export", lang)}
+              </Button>
+            </>
+          )}
           <Button size="sm" variant="ghost" onClick={onDeleteBlock}>
-            Удалить
+            {t("admin.delete", lang)}
           </Button>
         </div>
       </div>
+
+      {/* Import Modal */}
+      <Modal open={showImport} onClose={() => setShowImport(false)} title="Импорт позиций">
+        <div className="space-y-3">
+          <p className="text-xs text-text-secondary">
+            Введите позиции, каждая с новой строки в формате:
+          </p>
+          <p className="text-xs text-text-tertiary bg-surface px-3 py-2 rounded-[var(--radius-apple)] font-mono">
+            Мясо - 4кг - 55,90<br />
+            Огурцы - 1кг<br />
+            Фисташки - 1кг - 12,50
+          </p>
+          <textarea
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            rows={8}
+            autoFocus
+            placeholder="Вставьте список позиций..."
+            className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary placeholder:text-text-tertiary text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent resize-none font-mono"
+          />
+          <div className="flex gap-2">
+            <Button onClick={handleImport} disabled={!importText.trim()}>
+              Импортировать
+            </Button>
+            <Button variant="ghost" onClick={() => setShowImport(false)}>
+              Отмена
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {block.items.length === 0 && !isEditing ? (
         <p className="text-sm text-text-tertiary">

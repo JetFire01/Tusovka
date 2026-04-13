@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { Card, CardTitle } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { formatDateRu } from "@/lib/blocks";
 import { calculateFinances, FinanceResult } from "@/lib/money";
@@ -51,6 +52,17 @@ export default function StatisticsPage() {
   const eventId = params.eventId as string;
   const [event, setEvent] = useState<EventData | null>(null);
   const [finances, setFinances] = useState<FinanceResult | null>(null);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descText, setDescText] = useState("");
+
+  async function moveBlock(blockId: string, direction: "up" | "down") {
+    await fetch(`/api/events/${eventId}/blocks`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blockId, direction }),
+    });
+    fetchEvent();
+  }
 
   const fetchEvent = useCallback(async () => {
     const res = await fetch(`/api/events/${eventId}`);
@@ -96,8 +108,56 @@ export default function StatisticsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">{event.title}</h1>
-        {event.description && (
-          <p className="text-text-secondary mt-1">{event.description}</p>
+        {editingDesc ? (
+          <div className="mt-2 space-y-2">
+            <textarea
+              value={descText}
+              onChange={(e) => setDescText(e.target.value)}
+              placeholder="Описание мероприятия..."
+              rows={3}
+              autoFocus
+              className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary placeholder:text-text-tertiary text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent resize-none"
+            />
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={async () => {
+                  await fetch(`/api/events/${eventId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ description: descText.trim() }),
+                  });
+                  setEditingDesc(false);
+                  fetchEvent();
+                }}
+              >
+                Сохранить
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditingDesc(false)}>
+                Отмена
+              </Button>
+            </div>
+          </div>
+        ) : event.description ? (
+          <p
+            className="text-text-secondary mt-1 cursor-pointer hover:text-text-primary transition-colors"
+            onClick={() => {
+              setDescText(event.description || "");
+              setEditingDesc(true);
+            }}
+          >
+            {event.description}
+          </p>
+        ) : (
+          <button
+            className="text-sm text-accent hover:underline mt-1"
+            onClick={() => {
+              setDescText("");
+              setEditingDesc(true);
+            }}
+          >
+            Добавить описание
+          </button>
         )}
       </div>
 
@@ -318,10 +378,20 @@ export default function StatisticsPage() {
       {/* Blocks overview — render each, with "unclaimed" right after equipment */}
       {event.blocks
         .filter((b) => b.type !== "date_place")
-        .map((block) => (
+        .map((block, idx, arr) => (
           <div key={block.id}>
             <Card>
-              <CardTitle>{block.title}</CardTitle>
+              <div className="flex items-center justify-between mb-2">
+                <CardTitle>{block.title}</CardTitle>
+                <div className="flex gap-0.5 items-center">
+                  {idx > 0 && (
+                    <button onClick={() => moveBlock(block.id, "up")} className="px-1.5 py-1 text-text-secondary hover:text-text-primary transition-colors text-lg leading-none">↑</button>
+                  )}
+                  {idx < arr.length - 1 && (
+                    <button onClick={() => moveBlock(block.id, "down")} className="px-1.5 py-1 text-text-secondary hover:text-text-primary transition-colors text-lg leading-none">↓</button>
+                  )}
+                </div>
+              </div>
               {block.items.length === 0 ? (
                 <p className="text-sm text-text-tertiary mt-2">
                   Нет элементов

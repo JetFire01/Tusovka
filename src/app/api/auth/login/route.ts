@@ -4,29 +4,25 @@ import { hashPin, createToken } from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
-  const { nickname, pin } = body;
+  const { pin } = body;
 
-  if (!nickname || !pin) {
+  if (!pin) {
     return NextResponse.json(
-      { error: "Введите никнейм и PIN-код" },
+      { error: "Введите PIN-код" },
       { status: 400 }
     );
   }
 
   const pinHash = await hashPin(pin);
 
-  const user = await prisma.user.findUnique({
-    where: {
-      nickname_pinHash: {
-        nickname: nickname.trim(),
-        pinHash,
-      },
-    },
+  // Find user by PIN hash only
+  const user = await prisma.user.findFirst({
+    where: { pinHash },
   });
 
   if (!user) {
     return NextResponse.json(
-      { error: "Неверный никнейм или PIN-код" },
+      { error: "Неверный PIN-код" },
       { status: 401 }
     );
   }

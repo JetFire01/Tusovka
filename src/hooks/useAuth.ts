@@ -10,7 +10,7 @@ export interface AuthUser {
 
 interface AuthContextType {
   user: AuthUser | null;
-  login: (nickname: string, pin: string) => Promise<boolean>;
+  login: (pin: string) => Promise<boolean>;
   register: (nickname: string) => Promise<AuthUser | null>;
   logout: () => void;
   isLoading: boolean;
