@@ -200,9 +200,9 @@ export function calculateFinances(event: EventInfo): FinanceResult {
       const drinkers = attendees.filter((a) => {
         const pref = alcoholResponses.get(a.user.id);
         if (!pref) return false;
-        if (pref.preference === "Всё") return true;
-        if (pref.preference === "Не пью") return false;
-        if (pref.preference === "Пью только...") {
+        if (pref.preference === "all" || pref.preference === "Всё") return true;
+        if (pref.preference === "none" || pref.preference === "Не пью") return false;
+        if (pref.preference === "only" || pref.preference === "Пью только...") {
           return pref.types.includes(item.name);
         }
         return false;

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useLang, t } from "@/lib/i18n";
+import { useTheme } from "@/components/ThemeProvider";
 import { Card, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -30,6 +31,7 @@ interface UserData {
 export default function HomePage() {
   const { user, isLoading } = useAuth();
   const { lang, setLang } = useLang();
+  const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [tab, setTab] = useState<"events" | "users">("events");
   const [events, setEvents] = useState<EventData[]>([]);
@@ -128,6 +130,13 @@ export default function HomePage() {
             <p className="text-sm text-text-secondary">{t("app.subtitle", lang)}</p>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+              className="px-2 py-1 text-base rounded-[8px] bg-surface text-text-secondary hover:text-text-primary transition-colors"
+              title={theme === "light" ? "Dark mode" : "Light mode"}
+            >
+              {theme === "light" ? "\u{263D}" : "\u{2600}"}
+            </button>
             <button
               onClick={() => setLang(lang === "ru" ? "en" : "ru")}
               className="px-2 py-1 text-xs font-medium rounded-[8px] bg-surface text-text-secondary hover:text-text-primary transition-colors"

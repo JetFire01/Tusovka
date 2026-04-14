@@ -172,7 +172,7 @@ const translations = {
   "stats.participates": { ru: "участвует", en: "participates" },
   "stats.oweHim": { ru: "Ему должны", en: "Owed to them" },
 
-  // Block types
+  // Block types (label)
   "block.datePlace": { ru: "Дата и место", en: "Date & Place" },
   "block.food": { ru: "Еда", en: "Food" },
   "block.alcohol": { ru: "Алкоголь", en: "Alcohol" },
@@ -185,9 +185,33 @@ const translations = {
   "block.activities": { ru: "Мероприятия", en: "Activities" },
   "block.custom": { ru: "Пользовательский", en: "Custom" },
 
+  // Block default titles
+  "blockTitle.date_place": { ru: "Дата и место", en: "Date & Place" },
+  "blockTitle.food": { ru: "Еда и продукты", en: "Food & Groceries" },
+  "blockTitle.alcohol": { ru: "Алкоголь", en: "Alcohol" },
+  "blockTitle.tent": { ru: "Палатки и ночлег", en: "Tents & Lodging" },
+  "blockTitle.equipment": { ru: "Материалы и оснастка", en: "Supplies & Equipment" },
+  "blockTitle.transport": { ru: "Транспорт", en: "Transport" },
+  "blockTitle.pyrotechnics": { ru: "Пиротехника", en: "Pyrotechnics" },
+  "blockTitle.film": { ru: "Фотоплёнка", en: "Film" },
+  "blockTitle.day_food": { ru: "Паёк на день", en: "Daily Rations" },
+  "blockTitle.activities": { ru: "События и мероприятия", en: "Events & Activities" },
+  "blockTitle.custom": { ru: "Новый блок", en: "New Block" },
+
+  // Statistics extra
+  "stats.name": { ru: "Имя", en: "Name" },
+  "stats.notGoingLabel": { ru: "не идёт", en: "not going" },
+  "stats.owedBackAmount": { ru: "Ему должны вернуть", en: "Owed back" },
+  "stats.oweHimShort": { ru: "Ему должны", en: "Owed to them" },
+
+  // Admin extra
+  "admin.importPlaceholder": { ru: "Вставьте список позиций...", en: "Paste items list..." },
+  "admin.noItemsHint": { ru: "Нет элементов. Нажмите \"Добавить\" чтобы начать.", en: "No items. Click \"Add\" to start." },
+
   // Common
   "common.back": { ru: "← Назад", en: "← Back" },
   "common.price": { ru: "Цена", en: "Price" },
+  "common.priceLabel": { ru: "Цена", en: "Price" },
   "common.forAll": { ru: "Для всех", en: "For all" },
   "common.departure": { ru: "Выезд", en: "Departure" },
   "common.fuelLabel": { ru: "Бензин", en: "Fuel" },

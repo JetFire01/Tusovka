@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { formatDateRu } from "@/lib/blocks";
 import { calculateFinances, FinanceResult } from "@/lib/money";
+import { useLang, t } from "@/lib/i18n";
 
 interface EventData {
   id: string;
@@ -52,6 +53,7 @@ export default function StatisticsPage() {
   const eventId = params.eventId as string;
   const [event, setEvent] = useState<EventData | null>(null);
   const [finances, setFinances] = useState<FinanceResult | null>(null);
+  const { lang } = useLang();
   const [editingDesc, setEditingDesc] = useState(false);
   const [descText, setDescText] = useState("");
 
@@ -131,10 +133,10 @@ export default function StatisticsPage() {
                   fetchEvent();
                 }}
               >
-                Сохранить
+                {t("admin.save", lang)}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setEditingDesc(false)}>
-                Отмена
+                {t("admin.cancel", lang)}
               </Button>
             </div>
           </div>
@@ -156,7 +158,7 @@ export default function StatisticsPage() {
               setEditingDesc(true);
             }}
           >
-            Добавить описание
+            {t("event.addDescription", lang)}
           </button>
         )}
       </div>
@@ -164,7 +166,7 @@ export default function StatisticsPage() {
       {/* Date & Place */}
       {datePlaceConfig && datePlaceConfig.startDate && (
         <Card>
-          <CardTitle>Дата и место</CardTitle>
+          <CardTitle>{t("stats.dateAndPlace", lang)}</CardTitle>
           <div className="mt-2 space-y-1">
             <p className="text-sm">
               {formatDateRu(datePlaceConfig.startDate)}
@@ -187,11 +189,11 @@ export default function StatisticsPage() {
         <Card padding="none">
           <div className="p-4 sm:p-5 border-b border-border-light">
             <CardTitle>
-              Участники ({attendees.length}) — Финансы
+              {t("stats.participants", lang)} ({attendees.length}) — {t("stats.finances", lang)}
             </CardTitle>
             {finances.totalSpent > 0 && (
               <p className="text-sm text-text-secondary mt-1">
-                Общие затраты: {finances.totalSpent.toFixed(2)}
+                {t("stats.totalSpent", lang)}: {finances.totalSpent.toFixed(2)}
               </p>
             )}
           </div>
@@ -202,28 +204,28 @@ export default function StatisticsPage() {
               <thead>
                 <tr className="border-b border-border-light bg-surface/50">
                   <th className="text-left px-4 py-3 font-medium text-text-secondary">
-                    Имя
+                    {t("stats.name", lang)}
                   </th>
                   <th className="text-right px-3 py-3 font-medium text-text-secondary">
-                    Покупки
+                    {t("stats.purchases", lang)}
                   </th>
                   <th className="text-right px-3 py-3 font-medium text-text-secondary">
-                    Должок
+                    {t("stats.debt", lang)}
                   </th>
                   <th className="text-right px-3 py-3 font-medium text-text-secondary">
-                    Алкоголь
+                    {t("stats.alcohol", lang)}
                   </th>
                   <th className="text-right px-3 py-3 font-medium text-text-secondary">
-                    Пиро/Плёнка
+                    {t("stats.pyroFilm", lang)}
                   </th>
                   <th className="text-right px-3 py-3 font-medium text-text-secondary">
-                    Бензин
+                    {t("stats.fuel", lang)}
                   </th>
                   <th className="text-right px-3 py-3 font-medium text-text-secondary">
-                    Итого
+                    {t("stats.total", lang)}
                   </th>
                   <th className="text-left px-3 py-3 font-medium text-text-secondary">
-                    Кому торчишь?
+                    {t("stats.owesTo", lang)}
                   </th>
                 </tr>
               </thead>
@@ -270,7 +272,7 @@ export default function StatisticsPage() {
                             .map((d) => `${d.amount.toFixed(2)} → ${d.to}`)
                             .join(", ")
                         : p.total > 0
-                        ? "Ему должны"
+                        ? t("stats.oweHimShort", lang)
                         : "—"}
                     </td>
                   </tr>
@@ -302,7 +304,7 @@ export default function StatisticsPage() {
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                   {p.purchases > 0 && (
                     <>
-                      <span className="text-text-secondary">Покупки</span>
+                      <span className="text-text-secondary">{t("stats.purchases", lang)}</span>
                       <span className="text-right text-success">
                         +{p.purchases.toFixed(2)}
                       </span>
@@ -310,7 +312,7 @@ export default function StatisticsPage() {
                   )}
                   {p.foodAndGear > 0 && (
                     <>
-                      <span className="text-text-secondary">Должок</span>
+                      <span className="text-text-secondary">{t("stats.debt", lang)}</span>
                       <span className="text-right">
                         {p.foodAndGear.toFixed(2)}
                       </span>
@@ -318,7 +320,7 @@ export default function StatisticsPage() {
                   )}
                   {p.alcohol > 0 && (
                     <>
-                      <span className="text-text-secondary">Алкоголь</span>
+                      <span className="text-text-secondary">{t("stats.alcohol", lang)}</span>
                       <span className="text-right">
                         {p.alcohol.toFixed(2)}
                       </span>
@@ -326,7 +328,7 @@ export default function StatisticsPage() {
                   )}
                   {p.optInCosts > 0 && (
                     <>
-                      <span className="text-text-secondary">Пиро/Плёнка</span>
+                      <span className="text-text-secondary">{t("stats.pyroFilm", lang)}</span>
                       <span className="text-right">
                         {p.optInCosts.toFixed(2)}
                       </span>
@@ -334,14 +336,14 @@ export default function StatisticsPage() {
                   )}
                   {p.fuel > 0 && (
                     <>
-                      <span className="text-text-secondary">Бензин</span>
+                      <span className="text-text-secondary">{t("stats.fuel", lang)}</span>
                       <span className="text-right">{p.fuel.toFixed(2)}</span>
                     </>
                   )}
                 </div>
                 {p.debts.length > 0 && (
                   <div className="text-xs text-text-secondary pt-1 border-t border-border-light">
-                    Кому торчишь:{" "}
+                    {t("stats.owesLabel", lang)}{" "}
                     {p.debts
                       .map((d) => `${d.amount.toFixed(2)} → ${d.to}`)
                       .join(", ")}
@@ -349,7 +351,7 @@ export default function StatisticsPage() {
                 )}
                 {p.total > 0 && (
                   <div className="text-xs text-success pt-1 border-t border-border-light">
-                    Ему должны вернуть {p.total.toFixed(2)}
+                    {t("stats.owedBackAmount", lang)} {p.total.toFixed(2)}
                   </div>
                 )}
               </div>
@@ -369,7 +371,7 @@ export default function StatisticsPage() {
                 variant={p.attending === "no" ? "destructive" : "default"}
               >
                 {p.user.nickname}
-                {p.attending === "no" ? " (не идёт)" : " (?)"}
+                {p.attending === "no" ? ` (${t("stats.notGoingLabel", lang)})` : " (?)"}
               </Badge>
             ))}
         </div>
@@ -394,7 +396,7 @@ export default function StatisticsPage() {
               </div>
               {block.items.length === 0 ? (
                 <p className="text-sm text-text-tertiary mt-2">
-                  Нет элементов
+                  {t("stats.noItems", lang)}
                 </p>
               ) : (
                 <div className="mt-3 space-y-2">
@@ -415,32 +417,32 @@ export default function StatisticsPage() {
                               </span>
                             )}
                             {data.forEveryone && (
-                              <Badge variant="warning">Для всех</Badge>
+                              <Badge variant="warning">{t("common.forAll", lang)}</Badge>
                             )}
                             {data.itemMode === "buy" && (
-                              <Badge variant="accent">Купить</Badge>
+                              <Badge variant="accent">{t("admin.buy", lang)}</Badge>
                             )}
                             {data.transportType === "car" && (
-                              <Badge variant="accent">Машина</Badge>
+                              <Badge variant="accent">{t("admin.car", lang)}</Badge>
                             )}
                           </div>
                           {data.cost !== undefined && data.cost !== "" && (
                             <p className="text-xs text-text-secondary">
-                              Цена – {data.cost}
+                              {t("common.priceLabel", lang)} – {data.cost}
                               {data.buyerName && ` (${data.buyerName})`}
                             </p>
                           )}
                           {data.fuelCost !== undefined &&
                             data.fuelCost !== "" && (
                               <p className="text-xs text-text-secondary">
-                                Бензин – {data.fuelCost}
+                                {t("common.fuelLabel", lang)} – {data.fuelCost}
                                 {data.fuelBuyerName &&
                                   ` (${data.fuelBuyerName})`}
                               </p>
                             )}
                           {data.departureDate && (
                             <p className="text-xs text-text-tertiary">
-                              Выезд: {formatDateRu(data.departureDate)}
+                              {t("common.departure", lang)}: {formatDateRu(data.departureDate)}
                             </p>
                           )}
                           {data.notes && (
@@ -453,10 +455,10 @@ export default function StatisticsPage() {
                               {claims.map((c) => (
                                 <Badge key={c.id} variant="accent">
                                   {c.user.nickname}
-                                  {c.claimType === "bring" && " берёт"}
-                                  {c.claimType === "book_spot" && " бронь"}
-                                  {c.claimType === "book_seat" && " едет"}
-                                  {c.claimType === "opt_in" && " участвует"}
+                                  {c.claimType === "bring" && ` ${t("stats.brings", lang)}`}
+                                  {c.claimType === "book_spot" && ` ${t("stats.booked", lang)}`}
+                                  {c.claimType === "book_seat" && ` ${t("stats.rides", lang)}`}
+                                  {c.claimType === "opt_in" && ` ${t("stats.participates", lang)}`}
                                 </Badge>
                               ))}
                             </div>
@@ -477,7 +479,7 @@ export default function StatisticsPage() {
             {/* "Никто не берёт" right after equipment block */}
             {block.type === "equipment" && unclaimedItems.length > 0 && (
               <Card className="border-2 border-warning/30 mt-4">
-                <CardTitle>Никто не берёт!</CardTitle>
+                <CardTitle>{t("stats.nobodyBrings", lang)}</CardTitle>
                 <div className="mt-2 space-y-1">
                   {unclaimedItems.map((item) => {
                     const data = JSON.parse(item.data);
@@ -501,7 +503,7 @@ export default function StatisticsPage() {
           onClick={fetchEvent}
           className="text-sm text-accent hover:underline"
         >
-          Обновить данные
+          {t("stats.refresh", lang)}
         </button>
       </div>
     </div>

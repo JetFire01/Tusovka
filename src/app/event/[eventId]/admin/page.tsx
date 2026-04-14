@@ -8,7 +8,31 @@ import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { BLOCK_TYPES, BlockType, formatDateRu } from "@/lib/blocks";
-import { useLang, t } from "@/lib/i18n";
+import { useLang, t, Lang } from "@/lib/i18n";
+
+const BLOCK_LABEL_KEYS: Record<BlockType, string> = {
+  date_place: "block.datePlace",
+  food: "block.food",
+  alcohol: "block.alcohol",
+  tent: "block.tent",
+  equipment: "block.equipment",
+  transport: "block.transport",
+  pyrotechnics: "block.pyrotechnics",
+  film: "block.film",
+  day_food: "block.dayFood",
+  activities: "block.activities",
+  custom: "block.custom",
+};
+
+function blockLabel(type: BlockType, lang: Lang) {
+  const key = BLOCK_LABEL_KEYS[type];
+  return key ? t(key as Parameters<typeof t>[0], lang) : type;
+}
+
+function blockDefaultTitle(type: BlockType, lang: Lang) {
+  const key = `blockTitle.${type}` as Parameters<typeof t>[0];
+  return t(key, lang);
+}
 
 interface BlockData {
   id: string;
@@ -55,13 +79,12 @@ export default function AdminPage() {
   }, [fetchData]);
 
   async function addBlock(type: BlockType) {
-    const config = BLOCK_TYPES[type];
     await fetch(`/api/events/${eventId}/blocks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         type,
-        title: config.defaultTitle,
+        title: blockDefaultTitle(type, lang),
       }),
     });
     setShowAddBlock(false);
@@ -168,9 +191,9 @@ export default function AdminPage() {
               onClick={() => addBlock(config.key)}
               className="flex flex-col items-center gap-2 p-4 rounded-[var(--radius-apple)] border border-border hover:border-accent hover:bg-accent/5 transition-all text-center"
             >
-              <span className="text-sm font-medium">{config.label}</span>
+              <span className="text-sm font-medium">{blockLabel(config.key, lang)}</span>
               <span className="text-xs text-text-tertiary">
-                {config.defaultTitle}
+                {blockDefaultTitle(config.key, lang)}
               </span>
             </button>
           ))}
@@ -265,7 +288,7 @@ function BlockEditor({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <CardTitle>{block.title}</CardTitle>
-          <Badge variant="accent">{blockConfig?.label || block.type}</Badge>
+          <Badge variant="accent">{blockConfig ? blockLabel(blockConfig.key, lang) : block.type}</Badge>
           {exportNotice && (
             <span className="text-xs text-success font-medium animate-pulse">
               {t("admin.copied", lang)}
@@ -303,30 +326,30 @@ function BlockEditor({
       </div>
 
       {/* Import Modal */}
-      <Modal open={showImport} onClose={() => setShowImport(false)} title="Импорт позиций">
+      <Modal open={showImport} onClose={() => setShowImport(false)} title={t("admin.importTitle", lang)}>
         <div className="space-y-3">
           <p className="text-xs text-text-secondary">
-            Введите позиции, каждая с новой строки в формате:
+            {t("admin.importHint", lang)}
           </p>
           <p className="text-xs text-text-tertiary bg-surface px-3 py-2 rounded-[var(--radius-apple)] font-mono">
-            Мясо - 4кг - 55,90<br />
-            Огурцы - 1кг<br />
-            Фисташки - 1кг - 12,50
+            Meat - 4kg - 55.90<br />
+            Cucumbers - 1kg<br />
+            Pistachios - 1kg - 12.50
           </p>
           <textarea
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
             rows={8}
             autoFocus
-            placeholder="Вставьте список позиций..."
+            placeholder={t("admin.importPlaceholder", lang)}
             className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary placeholder:text-text-tertiary text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent resize-none font-mono"
           />
           <div className="flex gap-2">
             <Button onClick={handleImport} disabled={!importText.trim()}>
-              Импортировать
+              {t("admin.importBtn", lang)}
             </Button>
             <Button variant="ghost" onClick={() => setShowImport(false)}>
-              Отмена
+              {t("admin.cancel", lang)}
             </Button>
           </div>
         </div>
@@ -334,7 +357,7 @@ function BlockEditor({
 
       {block.items.length === 0 && !isEditing ? (
         <p className="text-sm text-text-tertiary">
-          Нет элементов. Нажмите &quot;Добавить&quot; чтобы начать.
+          {t("admin.noItemsHint", lang)}
         </p>
       ) : (
         <div className="space-y-2">
@@ -414,27 +437,29 @@ function DatePlaceEditor({
     setDirty(false);
   }
 
+  const { lang } = useLang();
+
   return (
     <Card>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <CardTitle>{block.title}</CardTitle>
-          <Badge variant="accent">Дата и место</Badge>
+          <Badge variant="accent">{t("block.datePlace", lang)}</Badge>
         </div>
         <Button size="sm" variant="ghost" onClick={onDeleteBlock}>
-          Удалить
+          {t("admin.delete", lang)}
         </Button>
       </div>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <Input
-            label="Дата начала"
+            label={t("datePlace.startDate", lang)}
             type="date"
             value={startDate}
             onChange={(e) => { setStartDate(e.target.value); setDirty(true); }}
           />
           <Input
-            label="Время начала"
+            label={t("datePlace.startTime", lang)}
             type="time"
             value={startTime}
             onChange={(e) => { setStartTime(e.target.value); setDirty(true); }}
@@ -442,23 +467,22 @@ function DatePlaceEditor({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Input
-            label="Дата окончания"
+            label={t("datePlace.endDate", lang)}
             type="date"
             value={endDate}
             onChange={(e) => { setEndDate(e.target.value); setDirty(true); }}
           />
           <Input
-            label="Время окончания"
+            label={t("datePlace.endTime", lang)}
             type="time"
             value={endTime}
             onChange={(e) => { setEndTime(e.target.value); setDirty(true); }}
           />
         </div>
         <Input
-          label="Место проведения"
+          label={t("datePlace.place", lang)}
           value={place}
           onChange={(e) => { setPlace(e.target.value); setDirty(true); }}
-          placeholder="Национальный парк, д. Крупица..."
         />
         {startDate && (
           <p className="text-sm text-text-secondary">
@@ -470,7 +494,7 @@ function DatePlaceEditor({
         )}
         {dirty && (
           <Button size="sm" onClick={save}>
-            Сохранить
+            {t("admin.save", lang)}
           </Button>
         )}
       </div>
@@ -491,6 +515,7 @@ function ItemDisplay({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { lang } = useLang();
   return (
     <div className="flex items-center justify-between py-2 px-3 rounded-[8px] hover:bg-surface transition-colors group">
       <div className="flex-1">
@@ -500,19 +525,19 @@ function ItemDisplay({
             <span className="text-text-secondary text-sm">— {String(data.quantity)}</span>
           )}
           {data.itemMode === "buy" && (
-            <Badge variant="accent">Купить</Badge>
+            <Badge variant="accent">{t("admin.buy", lang)}</Badge>
           )}
           {data.itemMode === "bring" && (
-            <Badge variant="success">Взять своё</Badge>
+            <Badge variant="success">{t("admin.bringOwn", lang)}</Badge>
           )}
           {data.forEveryone && (
-            <Badge variant="warning">Для всех</Badge>
+            <Badge variant="warning">{t("admin.forEveryone", lang)}</Badge>
           )}
           {data.transportType === "car" && (
-            <Badge variant="accent">Машина</Badge>
+            <Badge variant="accent">{t("admin.car", lang)}</Badge>
           )}
           {data.transportType === "other" && (
-            <Badge variant="default">Другое</Badge>
+            <Badge variant="default">{t("admin.other", lang)}</Badge>
           )}
         </div>
         {data.source && (
@@ -520,7 +545,7 @@ function ItemDisplay({
         )}
         {data.cost !== undefined && data.cost !== "" && (
           <span className="text-accent text-sm ml-1">
-            Цена – {String(data.cost)}
+            {t("common.priceLabel", lang)} – {String(data.cost)}
             {data.buyerName && (
               <span className="text-text-secondary"> ({String(data.buyerName)})</span>
             )}
@@ -528,7 +553,7 @@ function ItemDisplay({
         )}
         {data.fuelCost !== undefined && data.fuelCost !== "" && (
           <span className="text-accent text-sm ml-1">
-            Бензин – {String(data.fuelCost)}
+            {t("common.fuelLabel", lang)} – {String(data.fuelCost)}
             {data.fuelBuyerName && (
               <span className="text-text-secondary"> ({String(data.fuelBuyerName)})</span>
             )}
@@ -536,7 +561,7 @@ function ItemDisplay({
         )}
         {data.departureDate && (
           <p className="text-xs text-text-secondary mt-0.5">
-            Выезд: {formatDateRu(String(data.departureDate))}
+            {t("common.departure", lang)}: {formatDateRu(String(data.departureDate))}
           </p>
         )}
         {data.notes && (
@@ -548,13 +573,13 @@ function ItemDisplay({
           className="text-xs text-accent hover:underline px-2 py-1"
           onClick={onEdit}
         >
-          Изм.
+          {t("admin.edit", lang)}
         </button>
         <button
           className="text-xs text-destructive hover:underline px-2 py-1"
           onClick={onDelete}
         >
-          Уд.
+          {t("admin.del", lang)}
         </button>
       </div>
     </div>
@@ -597,29 +622,31 @@ function ItemForm({
   const [sharedFuel, setSharedFuel] = useState((initial?.sharedFuel as boolean) || false);
   const [driverPays, setDriverPays] = useState((initial?.driverPays as boolean) || false);
 
+  const { lang } = useLang();
+
   // Equipment: show mode selector first
   if (blockType === "equipment" && !equipmentMode && !initial) {
     return (
       <div className="p-3 bg-surface rounded-[var(--radius-apple)] space-y-3">
-        <p className="text-sm font-medium text-text-primary">Тип позиции:</p>
+        <p className="text-sm font-medium text-text-primary">{t("admin.itemType", lang)}</p>
         <div className="flex gap-3">
           <button
             onClick={() => setEquipmentMode("bring")}
             className="flex-1 p-4 rounded-[var(--radius-apple)] border border-border hover:border-accent hover:bg-accent/5 transition-all text-center"
           >
-            <p className="font-medium text-sm">Взять своё</p>
-            <p className="text-xs text-text-tertiary mt-1">У кого-то есть эта вещь</p>
+            <p className="font-medium text-sm">{t("admin.bringOwn", lang)}</p>
+            <p className="text-xs text-text-tertiary mt-1">{t("admin.someoneHas", lang)}</p>
           </button>
           <button
             onClick={() => setEquipmentMode("buy")}
             className="flex-1 p-4 rounded-[var(--radius-apple)] border border-border hover:border-accent hover:bg-accent/5 transition-all text-center"
           >
-            <p className="font-medium text-sm">Купить</p>
-            <p className="text-xs text-text-tertiary mt-1">Нужно купить в магазине</p>
+            <p className="font-medium text-sm">{t("admin.buy", lang)}</p>
+            <p className="text-xs text-text-tertiary mt-1">{t("admin.buyInStore", lang)}</p>
           </button>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          Отмена
+          {t("admin.cancel", lang)}
         </Button>
       </div>
     );
@@ -629,25 +656,25 @@ function ItemForm({
   if (blockType === "transport" && !transportType && !initial) {
     return (
       <div className="p-3 bg-surface rounded-[var(--radius-apple)] space-y-3">
-        <p className="text-sm font-medium text-text-primary">Тип транспорта:</p>
+        <p className="text-sm font-medium text-text-primary">{t("admin.transportType", lang)}</p>
         <div className="flex gap-3">
           <button
             onClick={() => setTransportType("car")}
             className="flex-1 p-4 rounded-[var(--radius-apple)] border border-border hover:border-accent hover:bg-accent/5 transition-all text-center"
           >
-            <p className="font-medium text-sm">Машина</p>
-            <p className="text-xs text-text-tertiary mt-1">Автомобиль с местами</p>
+            <p className="font-medium text-sm">{t("admin.car", lang)}</p>
+            <p className="text-xs text-text-tertiary mt-1">{t("admin.carWithSeats", lang)}</p>
           </button>
           <button
             onClick={() => setTransportType("other")}
             className="flex-1 p-4 rounded-[var(--radius-apple)] border border-border hover:border-accent hover:bg-accent/5 transition-all text-center"
           >
-            <p className="font-medium text-sm">Другое</p>
-            <p className="text-xs text-text-tertiary mt-1">Автобус, поезд и т.д.</p>
+            <p className="font-medium text-sm">{t("admin.other", lang)}</p>
+            <p className="text-xs text-text-tertiary mt-1">{t("admin.busTrainEtc", lang)}</p>
           </button>
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          Отмена
+          {t("admin.cancel", lang)}
         </Button>
       </div>
     );
@@ -715,35 +742,35 @@ function ItemForm({
       {blockType === "equipment" && (
         <div className="flex items-center gap-2 mb-1">
           <Badge variant={equipmentMode === "buy" ? "accent" : "success"}>
-            {equipmentMode === "buy" ? "Купить" : "Взять своё"}
+            {equipmentMode === "buy" ? t("admin.buy", lang) : t("admin.bringOwn", lang)}
           </Badge>
         </div>
       )}
       {blockType === "transport" && (
         <div className="flex items-center gap-2 mb-1">
           <Badge variant={transportType === "car" ? "accent" : "default"}>
-            {transportType === "car" ? "Машина" : "Другое"}
+            {transportType === "car" ? t("admin.car", lang) : t("admin.other", lang)}
           </Badge>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-3">
         <Input
-          placeholder="Название"
+          placeholder={t("form.name", lang)}
           value={name}
           onChange={(e) => setName(e.target.value)}
           autoFocus
         />
         {showQuantity && (
           <Input
-            placeholder="Количество"
+            placeholder={t("form.quantity", lang)}
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
           />
         )}
         {showSource && (
           <Input
-            placeholder="Где купить"
+            placeholder={t("form.whereToBuy", lang)}
             value={source}
             onChange={(e) => setSource(e.target.value)}
           />
@@ -751,7 +778,7 @@ function ItemForm({
         {showCostAndBuyer && (
           <>
             <Input
-              placeholder="Цена"
+              placeholder={t("form.price", lang)}
               type="number"
               step="0.01"
               value={cost}
@@ -763,7 +790,7 @@ function ItemForm({
                 onChange={(e) => setBuyerName(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
               >
-                <option value="">Кто купил?</option>
+                <option value="">{t("form.whoBought", lang)}</option>
                 {participantOptions.map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
@@ -776,19 +803,19 @@ function ItemForm({
         {isTransportCar && (
           <>
             <Input
-              placeholder="Всего мест"
+              placeholder={t("form.totalSeats", lang)}
               type="number"
               value={totalSeats}
               onChange={(e) => setTotalSeats(e.target.value)}
             />
             <Input
-              label="День выезда"
+              label={t("form.departureDate", lang)}
               type="date"
               value={departureDate}
               onChange={(e) => setDepartureDate(e.target.value)}
             />
             <Input
-              placeholder="Сумма за бензин"
+              placeholder={t("form.fuelCost", lang)}
               type="number"
               step="0.01"
               value={fuelCost}
@@ -800,7 +827,7 @@ function ItemForm({
                 onChange={(e) => setFuelBuyerName(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
               >
-                <option value="">Кто заплатил за бензин?</option>
+                <option value="">{t("form.whoPaidFuel", lang)}</option>
                 {participantOptions.map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
@@ -812,7 +839,7 @@ function ItemForm({
         {/* Tent */}
         {blockType === "tent" && (
           <Input
-            placeholder="Вакантных мест"
+            placeholder={t("form.vacantSpots", lang)}
             type="number"
             value={totalSeats}
             onChange={(e) => setTotalSeats(e.target.value)}
@@ -829,7 +856,7 @@ function ItemForm({
             onChange={(e) => setForEveryone(e.target.checked)}
             className="w-4 h-4 rounded border-border text-accent focus:ring-accent/50"
           />
-          <span className="text-sm text-text-primary">Для всех участников</span>
+          <span className="text-sm text-text-primary">{t("admin.forEveryone", lang)}</span>
         </label>
       )}
 
@@ -843,7 +870,7 @@ function ItemForm({
               onChange={(e) => setSharedFuel(e.target.checked)}
               className="w-4 h-4 rounded border-border text-accent focus:ring-accent/50"
             />
-            <span className="text-sm text-text-primary">Средняя цена бензина для всех участников</span>
+            <span className="text-sm text-text-primary">{t("admin.sharedFuel", lang)}</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -852,29 +879,29 @@ function ItemForm({
               onChange={(e) => setDriverPays(e.target.checked)}
               className="w-4 h-4 rounded border-border text-accent focus:ring-accent/50"
             />
-            <span className="text-sm text-text-primary">Водитель платит за бензин</span>
+            <span className="text-sm text-text-primary">{t("admin.driverPays", lang)}</span>
           </label>
         </div>
       )}
 
       <Input
-        placeholder="Примечания"
+        placeholder={t("form.notes", lang)}
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
       />
 
       {departureDate && isTransportCar && (
         <p className="text-xs text-text-secondary">
-          Выезд: {formatDateRu(departureDate)}
+          {t("common.departure", lang)}: {formatDateRu(departureDate)}
         </p>
       )}
 
       <div className="flex gap-2">
         <Button type="submit" size="sm">
-          {initial ? "Сохранить" : "Добавить"}
+          {initial ? t("admin.save", lang) : t("admin.add", lang)}
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          Отмена
+          {t("admin.cancel", lang)}
         </Button>
       </div>
     </form>

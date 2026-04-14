@@ -7,6 +7,7 @@ import { Card, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { formatDateRu } from "@/lib/blocks";
+import { useLang, t } from "@/lib/i18n";
 
 interface BlockData {
   id: string;
@@ -45,6 +46,7 @@ export default function SurveyPage() {
   const router = useRouter();
   const eventId = params.eventId as string;
   const { user } = useAuth();
+  const { lang } = useLang();
   const [blocks, setBlocks] = useState<BlockData[]>([]);
   const [attending, setAttending] = useState("yes");
   const [startDateStr, setStartDateStr] = useState("");
@@ -164,21 +166,21 @@ export default function SurveyPage() {
   if (!user) {
     return (
       <Card className="text-center py-12">
-        <p className="text-text-secondary">Войдите для прохождения опросника</p>
+        <p className="text-text-secondary">{t("survey.loginRequired", lang)}</p>
       </Card>
     );
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Опросник</h1>
+      <h1 className="text-2xl font-bold">{t("survey.title", lang)}</h1>
 
       {/* Attendance */}
       <Card>
-        <CardTitle>Участие</CardTitle>
-        <CardDescription>Вы идёте?</CardDescription>
+        <CardTitle>{t("survey.attendance", lang)}</CardTitle>
+        <CardDescription>{t("survey.areYouGoing", lang)}</CardDescription>
         <div className="flex gap-2 mt-3">
-          {["yes", "no", "unknown"].map((v) => (
+          {(["yes", "no", "unknown"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setAttending(v)}
@@ -188,7 +190,7 @@ export default function SurveyPage() {
                   : "bg-surface text-text-secondary hover:bg-surface/80"
               }`}
             >
-              {v === "yes" ? "Да" : v === "no" ? "Нет" : "Не уверен"}
+              {v === "yes" ? t("survey.yes", lang) : v === "no" ? t("survey.no", lang) : t("survey.notSure", lang)}
             </button>
           ))}
         </div>
@@ -196,7 +198,7 @@ export default function SurveyPage() {
           <div className="mt-3 space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-text-primary">Дата приезда</label>
+                <label className="text-sm font-medium text-text-primary">{t("survey.arrivalDate", lang)}</label>
                 <input
                   type="date"
                   min={eventStartDate}
@@ -207,7 +209,7 @@ export default function SurveyPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-text-primary">Дата отъезда</label>
+                <label className="text-sm font-medium text-text-primary">{t("survey.departureDate", lang)}</label>
                 <input
                   type="date"
                   min={startDateStr || eventStartDate}
@@ -228,7 +230,7 @@ export default function SurveyPage() {
         )}
         {attending === "yes" && !eventStartDate && (
           <p className="text-xs text-text-tertiary mt-2">
-            Даты мероприятия ещё не указаны в админке (блок &quot;Дата и место&quot;)
+            {t("survey.datesNotSet", lang)}
           </p>
         )}
       </Card>
@@ -254,7 +256,7 @@ export default function SurveyPage() {
           className="w-full shadow-[var(--shadow-apple-lg)]"
           size="lg"
         >
-          {saving ? "Сохранение..." : "Сохранить ответы"}
+          {saving ? t("survey.saving", lang) : t("survey.save", lang)}
         </Button>
       </div>
     </div>
@@ -276,37 +278,45 @@ function BlockSurvey({
   onClaim: (blockItemId: string, claimType: string, data?: Record<string, unknown>) => void;
   onRemoveClaim: (claimId: string) => void;
 }) {
+  const { lang } = useLang();
   const type = block.type;
+
+  // Alcohol preference keys (stored in DB) → display labels
+  const alcoholOptions = [
+    { key: "all", label: t("survey.all", lang) },
+    { key: "none", label: t("survey.dontDrink", lang) },
+    { key: "only", label: t("survey.drinkOnly", lang) },
+  ];
 
   if (type === "alcohol") {
     return (
       <Card>
         <CardTitle>{block.title}</CardTitle>
-        <CardDescription>Что вы пьёте?</CardDescription>
+        <CardDescription>{t("survey.whatDrink", lang)}</CardDescription>
         <div className="flex flex-wrap gap-2 mt-3">
-          {["Всё", "Не пью", "Пью только..."].map((opt) => (
+          {alcoholOptions.map((opt) => (
             <button
-              key={opt}
+              key={opt.key}
               onClick={() => {
-                onUpdate("preference", opt);
-                if (opt !== "Пью только...") {
+                onUpdate("preference", opt.key);
+                if (opt.key !== "only") {
                   onUpdate("types", []);
                 }
               }}
               className={`px-4 py-2 rounded-[var(--radius-apple)] text-sm font-medium transition-all ${
-                response.preference === opt
+                response.preference === opt.key
                   ? "bg-accent text-white"
                   : "bg-surface text-text-secondary hover:bg-surface/80"
               }`}
             >
-              {opt}
+              {opt.label}
             </button>
           ))}
         </div>
-        {response.preference === "Пью только..." && (
+        {response.preference === "only" && (
           <div className="mt-3">
             <p className="text-sm text-text-secondary mb-2">
-              Выберите что вы пьёте:
+              {t("survey.selectDrinks", lang)}
             </p>
             <div className="flex flex-wrap gap-2">
               {block.items.map((item) => {
@@ -332,7 +342,7 @@ function BlockSurvey({
                   >
                     {item.name}
                     {data.cost !== undefined && (
-                      <span className="ml-1 opacity-70">Цена – {data.cost}</span>
+                      <span className="ml-1 opacity-70">{t("common.priceLabel", lang)} – {data.cost}</span>
                     )}
                   </button>
                 );
@@ -340,14 +350,14 @@ function BlockSurvey({
             </div>
           </div>
         )}
-        {/* Show cost info for "Всё" */}
-        {response.preference === "Всё" && block.items.some(i => JSON.parse(i.data).cost) && (
+        {/* Show cost info for "all" */}
+        {response.preference === "all" && block.items.some(i => JSON.parse(i.data).cost) && (
           <div className="mt-3 space-y-1">
             {block.items.map((item) => {
               const data = JSON.parse(item.data);
               return data.cost ? (
                 <p key={item.id} className="text-xs text-text-secondary">
-                  {item.name}: Цена – {data.cost}
+                  {item.name}: {t("common.priceLabel", lang)} – {data.cost}
                 </p>
               ) : null;
             })}
@@ -365,7 +375,7 @@ function BlockSurvey({
     return (
       <Card>
         <CardTitle>{block.title}</CardTitle>
-        <CardDescription>Как вы добираетесь?</CardDescription>
+        <CardDescription>{t("survey.howTravel", lang)}</CardDescription>
         <div className="flex gap-2 mt-3">
           <button
             onClick={() => onUpdate("mode", "passenger")}
@@ -378,8 +388,8 @@ function BlockSurvey({
                 : "bg-surface text-text-secondary hover:bg-surface/80"
             }`}
           >
-            Пассажиром
-            {!hasCars && <span className="block text-xs">(нет машин)</span>}
+            {t("survey.passenger", lang)}
+            {!hasCars && <span className="block text-xs">{t("survey.noCars", lang)}</span>}
           </button>
           <button
             onClick={() => onUpdate("mode", "self")}
@@ -389,13 +399,13 @@ function BlockSurvey({
                 : "bg-surface text-text-secondary hover:bg-surface/80"
             }`}
           >
-            Своим ходом
+            {t("survey.selfTravel", lang)}
           </button>
         </div>
 
         {response.mode === "passenger" && cars.length > 0 && (
           <div className="mt-3">
-            <p className="text-sm text-text-secondary mb-2">Доступные машины:</p>
+            <p className="text-sm text-text-secondary mb-2">{t("survey.availableCars", lang)}</p>
             {cars.map((item) => {
               const data = JSON.parse(item.data);
               const bookedSeats = item.claims.filter(
@@ -414,16 +424,16 @@ function BlockSurvey({
                   <div>
                     <span className="text-sm font-medium">{item.name}</span>
                     <span className="text-xs text-text-secondary ml-2">
-                      {available > 0 ? `${available} свободных мест` : "Мест нет"}
+                      {available > 0 ? `${available} ${t("survey.freeSpots", lang)}` : t("survey.noSpots", lang)}
                     </span>
                     {data.departureDate && (
                       <p className="text-xs text-text-tertiary">
-                        Выезд: {formatDateRu(data.departureDate)}
+                        {t("common.departure", lang)}: {formatDateRu(data.departureDate)}
                       </p>
                     )}
                     {data.fuelCost && (
                       <p className="text-xs text-text-secondary">
-                        Цена – {data.fuelCost} (бензин)
+                        {t("common.priceLabel", lang)} – {data.fuelCost} ({t("common.fuelLabel", lang).toLowerCase()})
                       </p>
                     )}
                     {item.claims.filter(c => c.claimType === "book_seat").length > 0 && (
@@ -436,11 +446,11 @@ function BlockSurvey({
                   </div>
                   {myBooking ? (
                     <Button size="sm" variant="destructive" onClick={() => onRemoveClaim(myBooking.id)}>
-                      Отменить
+                      {t("survey.cancelSeat", lang)}
                     </Button>
                   ) : available > 0 ? (
                     <Button size="sm" variant="secondary" onClick={() => onClaim(item.id, "book_seat")}>
-                      Сесть
+                      {t("survey.sit", lang)}
                     </Button>
                   ) : null}
                 </div>
@@ -451,7 +461,7 @@ function BlockSurvey({
 
         {response.mode === "self" && others.length > 0 && (
           <div className="mt-3">
-            <p className="text-sm text-text-secondary mb-2">Другие варианты транспорта:</p>
+            <p className="text-sm text-text-secondary mb-2">{t("survey.otherTransport", lang)}</p>
             {others.map((item) => {
               const data = JSON.parse(item.data);
               const myBooking = item.claims.find(
@@ -462,7 +472,7 @@ function BlockSurvey({
                   <div>
                     <span className="text-sm font-medium">{item.name}</span>
                     {data.cost && (
-                      <span className="text-text-secondary text-sm ml-2">Цена – {data.cost}</span>
+                      <span className="text-text-secondary text-sm ml-2">{t("common.priceLabel", lang)} – {data.cost}</span>
                     )}
                     {data.notes && (
                       <p className="text-xs text-text-tertiary">{data.notes}</p>
@@ -477,11 +487,11 @@ function BlockSurvey({
                   </div>
                   {myBooking ? (
                     <Button size="sm" variant="destructive" onClick={() => onRemoveClaim(myBooking.id)}>
-                      Отменить
+                      {t("survey.cancelSeat", lang)}
                     </Button>
                   ) : (
                     <Button size="sm" variant="secondary" onClick={() => onClaim(item.id, "book_seat")}>
-                      Сесть
+                      {t("survey.sit", lang)}
                     </Button>
                   )}
                 </div>
@@ -497,7 +507,7 @@ function BlockSurvey({
     return (
       <Card>
         <CardTitle>{block.title}</CardTitle>
-        <CardDescription>Выберите палатку</CardDescription>
+        <CardDescription>{t("survey.chooseTent", lang)}</CardDescription>
         <div className="mt-3 space-y-2">
           {block.items.map((item) => {
             const data = JSON.parse(item.data);
@@ -517,7 +527,7 @@ function BlockSurvey({
                 <div>
                   <span className="text-sm font-medium">{item.name}</span>
                   <span className="text-xs text-text-secondary ml-2">
-                    {available > 0 ? `${available} свободных мест` : "Мест нет"}
+                    {available > 0 ? `${available} ${t("survey.freeSpots", lang)}` : t("survey.noSpots", lang)}
                   </span>
                   <div className="flex gap-1 mt-1">
                     {item.claims
@@ -529,11 +539,11 @@ function BlockSurvey({
                 </div>
                 {myBooking ? (
                   <Button size="sm" variant="destructive" onClick={() => onRemoveClaim(myBooking.id)}>
-                    Отменить
+                    {t("survey.cancelSeat", lang)}
                   </Button>
                 ) : available > 0 ? (
                   <Button size="sm" variant="secondary" onClick={() => onClaim(item.id, "book_spot")}>
-                    Занять
+                    {t("survey.take", lang)}
                   </Button>
                 ) : null}
               </div>
@@ -548,7 +558,7 @@ function BlockSurvey({
     return (
       <Card>
         <CardTitle>{block.title}</CardTitle>
-        <CardDescription>Отметьте что вы можете взять с собой</CardDescription>
+        <CardDescription>{t("survey.markBring", lang)}</CardDescription>
         <div className="mt-3 space-y-2">
           {block.items.map((item) => {
             const data = JSON.parse(item.data);
@@ -568,15 +578,15 @@ function BlockSurvey({
                       <span className="text-text-secondary text-xs">({data.quantity})</span>
                     )}
                     {data.forEveryone && (
-                      <Badge variant="warning">Для всех</Badge>
+                      <Badge variant="warning">{t("common.forAll", lang)}</Badge>
                     )}
                     {data.itemMode === "buy" && (
-                      <Badge variant="accent">Купить</Badge>
+                      <Badge variant="accent">{t("admin.buy", lang)}</Badge>
                     )}
                   </div>
                   {data.cost !== undefined && data.cost !== "" && (
                     <p className="text-xs text-text-secondary">
-                      Цена – {data.cost}
+                      {t("common.priceLabel", lang)} – {data.cost}
                       {data.buyerName && ` (${data.buyerName})`}
                     </p>
                   )}
@@ -585,7 +595,7 @@ function BlockSurvey({
                       {item.claims
                         .filter((c) => c.claimType === "bring")
                         .map((c) => (
-                          <Badge key={c.id} variant="success">{c.user.nickname} берёт</Badge>
+                          <Badge key={c.id} variant="success">{c.user.nickname} {t("stats.brings", lang)}</Badge>
                         ))}
                     </div>
                   )}
@@ -593,11 +603,11 @@ function BlockSurvey({
                 {data.itemMode !== "buy" && (
                   myClaim ? (
                     <Button size="sm" variant="destructive" onClick={() => onRemoveClaim(myClaim.id)}>
-                      Не беру
+                      {t("survey.dontBring", lang)}
                     </Button>
                   ) : (
                     <Button size="sm" variant="secondary" onClick={() => onClaim(item.id, "bring")}>
-                      Беру
+                      {t("survey.bring", lang)}
                     </Button>
                   )
                 )}
@@ -613,7 +623,7 @@ function BlockSurvey({
     return (
       <Card>
         <CardTitle>{block.title}</CardTitle>
-        <CardDescription>Хотите участвовать в складчине?</CardDescription>
+        <CardDescription>{t("survey.joinFunding", lang)}</CardDescription>
         <div className="mt-3 space-y-2">
           {block.items.map((item) => {
             const data = JSON.parse(item.data);
@@ -629,7 +639,7 @@ function BlockSurvey({
                     <span className="text-text-secondary text-xs ml-2">({data.quantity})</span>
                   )}
                   {data.cost !== undefined && (
-                    <span className="text-accent text-xs ml-2">Цена – {data.cost}</span>
+                    <span className="text-accent text-xs ml-2">{t("common.priceLabel", lang)} – {data.cost}</span>
                   )}
                   {data.buyerName && (
                     <span className="text-text-tertiary text-xs ml-1">({data.buyerName})</span>
@@ -637,11 +647,11 @@ function BlockSurvey({
                 </div>
                 {myClaim ? (
                   <Button size="sm" variant="destructive" onClick={() => onRemoveClaim(myClaim.id)}>
-                    Отказаться
+                    {t("survey.leaveBtn", lang)}
                   </Button>
                 ) : (
                   <Button size="sm" variant="secondary" onClick={() => onClaim(item.id, "opt_in")}>
-                    Участвую
+                    {t("survey.joinBtn", lang)}
                   </Button>
                 )}
               </div>
@@ -656,7 +666,7 @@ function BlockSurvey({
     return (
       <Card>
         <CardTitle>{block.title}</CardTitle>
-        <CardDescription>Запланированные мероприятия</CardDescription>
+        <CardDescription>{t("survey.plannedActivities", lang)}</CardDescription>
         <div className="mt-3 space-y-2">
           {block.items.map((item) => {
             const data = JSON.parse(item.data);
@@ -685,11 +695,11 @@ function BlockSurvey({
                 </div>
                 {myClaim ? (
                   <Button size="sm" variant="destructive" onClick={() => onRemoveClaim(myClaim.id)}>
-                    Не участвую
+                    {t("survey.notJoinBtn", lang)}
                   </Button>
                 ) : (
                   <Button size="sm" variant="secondary" onClick={() => onClaim(item.id, "opt_in")}>
-                    Участвую
+                    {t("survey.joinBtn", lang)}
                   </Button>
                 )}
               </div>
@@ -719,7 +729,7 @@ function BlockSurvey({
                 )}
                 {data.cost !== undefined && data.cost !== "" && (
                   <span className="text-accent ml-2">
-                    Цена – {data.cost}
+                    {t("common.priceLabel", lang)} – {data.cost}
                     {data.buyerName && (
                       <span className="text-text-secondary"> ({data.buyerName})</span>
                     )}

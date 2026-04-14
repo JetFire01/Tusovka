@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Tabs } from "@/components/ui/Tabs";
 import { useLang, t } from "@/lib/i18n";
+import { useTheme } from "@/components/ThemeProvider";
 
 export default function EventLayout({
   children,
@@ -12,7 +13,8 @@ export default function EventLayout({
 }) {
   const params = useParams();
   const eventId = params.eventId as string;
-  const { lang } = useLang();
+  const { lang, setLang } = useLang();
+  const { theme, setTheme } = useTheme();
 
   const tabs = [
     { label: t("tab.statistics", lang), href: `/event/${eventId}/statistics` },
@@ -31,6 +33,21 @@ export default function EventLayout({
             {t("common.back", lang)}
           </Link>
           <Tabs tabs={tabs} />
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+              className="px-2 py-1 text-base rounded-[8px] bg-surface text-text-secondary hover:text-text-primary transition-colors"
+              title={theme === "light" ? "Dark mode" : "Light mode"}
+            >
+              {theme === "light" ? "\u{263D}" : "\u{2600}"}
+            </button>
+            <button
+              onClick={() => setLang(lang === "ru" ? "en" : "ru")}
+              className="px-2 py-1 text-xs font-medium rounded-[8px] bg-surface text-text-secondary hover:text-text-primary transition-colors"
+            >
+              {lang === "ru" ? "EN" : "RU"}
+            </button>
+          </div>
         </div>
       </header>
       <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-6">

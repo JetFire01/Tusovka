@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { AuthProvider } from "@/components/AuthProvider";
 import { LangProvider } from "@/components/LangProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -20,11 +21,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru" className="h-full antialiased">
+    <html lang="ru" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){var t=localStorage.getItem("tusovka-theme");if(t==="dark")document.documentElement.setAttribute("data-theme","dark")})()`,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col">
-        <LangProvider>
-          <AuthProvider>{children}</AuthProvider>
-        </LangProvider>
+        <ThemeProvider>
+          <LangProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </LangProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
