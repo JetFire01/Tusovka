@@ -235,8 +235,11 @@ function BlockEditor({
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
   const [exportNotice, setExportNotice] = useState(false);
+  const [foodExpanded, setFoodExpanded] = useState(false);
 
   const hasImportExport = ["food", "day_food", "equipment", "alcohol", "pyrotechnics"].includes(block.type);
+  const isFood = block.type === "food";
+  const showItems = !isFood || foodExpanded || isEditing;
 
   function handleImport() {
     const lines = importText.split("\n").filter((l) => l.trim());
@@ -360,41 +363,57 @@ function BlockEditor({
           {t("admin.noItemsHint", lang)}
         </p>
       ) : (
-        <div className="space-y-2">
-          {block.items.map((item) => {
-            const data = JSON.parse(item.data);
-            const isEditingThis =
-              editingItem?.blockId === block.id &&
-              editingItem?.item?.id === item.id;
+        <>
+          {isFood && block.items.length > 0 && (
+            <button
+              onClick={() => setFoodExpanded((v) => !v)}
+              className="flex items-center gap-2 text-sm text-accent hover:underline mb-2"
+            >
+              <span>{showItems ? "▼" : "▶"}</span>
+              <span>
+                {showItems ? t("common.collapse", lang) : t("common.expand", lang)} (
+                {block.items.length} {t("common.itemsCount", lang)})
+              </span>
+            </button>
+          )}
+          {showItems && (
+            <div className="space-y-2">
+              {block.items.map((item) => {
+                const data = JSON.parse(item.data);
+                const isEditingThis =
+                  editingItem?.blockId === block.id &&
+                  editingItem?.item?.id === item.id;
 
-            if (isEditingThis) {
-              return (
-                <ItemForm
-                  key={item.id}
-                  blockType={block.type}
-                  participants={participants}
-                  initial={{ name: item.name, ...data }}
-                  onSave={(name, formData) => {
-                    onUpdateItem(item.id, name, formData);
-                    setEditingItem(null);
-                  }}
-                  onCancel={() => setEditingItem(null)}
-                />
-              );
-            }
+                if (isEditingThis) {
+                  return (
+                    <ItemForm
+                      key={item.id}
+                      blockType={block.type}
+                      participants={participants}
+                      initial={{ name: item.name, ...data }}
+                      onSave={(name, formData) => {
+                        onUpdateItem(item.id, name, formData);
+                        setEditingItem(null);
+                      }}
+                      onCancel={() => setEditingItem(null)}
+                    />
+                  );
+                }
 
-            return (
-              <ItemDisplay
-                key={item.id}
-                item={item}
-                data={data}
-                blockType={block.type}
-                onEdit={() => setEditingItem({ blockId: block.id, item })}
-                onDelete={() => onDeleteItem(item.id)}
-              />
-            );
-          })}
-        </div>
+                return (
+                  <ItemDisplay
+                    key={item.id}
+                    item={item}
+                    data={data}
+                    blockType={block.type}
+                    onEdit={() => setEditingItem({ blockId: block.id, item })}
+                    onDelete={() => onDeleteItem(item.id)}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {isEditing && !editingItem?.item && (

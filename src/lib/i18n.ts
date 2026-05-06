@@ -215,6 +215,25 @@ const translations = {
   "common.forAll": { ru: "Для всех", en: "For all" },
   "common.departure": { ru: "Выезд", en: "Departure" },
   "common.fuelLabel": { ru: "Бензин", en: "Fuel" },
+  "common.expand": { ru: "Развернуть", en: "Expand" },
+  "common.collapse": { ru: "Свернуть", en: "Collapse" },
+  "common.itemsCount": { ru: "позиций", en: "items" },
+
+  // Alcohol — "my proposal"
+  "alcohol.myProposal": { ru: "Моё предложение", en: "My suggestion" },
+  "alcohol.proposalNamePlaceholder": { ru: "Например: Шампанское Dom Perignon", en: "e.g.: Dom Perignon Champagne" },
+  "alcohol.proposalQtyPlaceholder": { ru: "Количество (необязательно)", en: "Quantity (optional)" },
+  "alcohol.proposalAdd": { ru: "Добавить", en: "Add" },
+  "alcohol.proposalCancel": { ru: "Отмена", en: "Cancel" },
+
+  // Food — wishes & list
+  "food.wishesTitle": { ru: "Пожелания по еде", en: "Food wishes" },
+  "food.wishesPlaceholder": { ru: "Пожелания по еде", en: "Food wishes" },
+  "food.addWishBtn": { ru: "Добавить пожелание по еде", en: "Add a food wish" },
+  "food.editWishBtn": { ru: "Изменить пожелание", en: "Edit wish" },
+  "food.saveWishBtn": { ru: "Добавить", en: "Add" },
+  "food.cancelWishBtn": { ru: "Отмена", en: "Cancel" },
+  "food.yourWish": { ru: "Ваше пожелание:", en: "Your wish:" },
 } as const;
 
 type TranslationKey = keyof typeof translations;

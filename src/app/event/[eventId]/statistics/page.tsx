@@ -56,6 +56,7 @@ export default function StatisticsPage() {
   const { lang } = useLang();
   const [editingDesc, setEditingDesc] = useState(false);
   const [descText, setDescText] = useState("");
+  const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({});
 
   async function moveBlock(blockId: string, direction: "up" | "down") {
     await fetch(`/api/events/${eventId}/blocks`, {
@@ -380,7 +381,27 @@ export default function StatisticsPage() {
       {/* Blocks overview — render each, with "unclaimed" right after equipment */}
       {event.blocks
         .filter((b) => b.type !== "date_place")
-        .map((block, idx, arr) => (
+        .map((block, idx, arr) => {
+          const isFood = block.type === "food";
+          const isAlcohol = block.type === "alcohol";
+          const isCollapsible = isFood || isAlcohol;
+          const isExpanded = !isCollapsible || expandedBlocks[block.id];
+          const foodWishes = isFood
+            ? event.participants
+                .map((p) => {
+                  const sr = p.surveyResponses.find((r) => r.blockId === block.id);
+                  if (!sr) return null;
+                  try {
+                    const data = JSON.parse(sr.response);
+                    const w = (data.wishes as string | undefined)?.trim();
+                    return w ? { nickname: p.user.nickname, text: w } : null;
+                  } catch {
+                    return null;
+                  }
+                })
+                .filter((x): x is { nickname: string; text: string } => x !== null)
+            : [];
+          return (
           <div key={block.id}>
             <Card>
               <div className="flex items-center justify-between mb-2">
@@ -394,11 +415,43 @@ export default function StatisticsPage() {
                   )}
                 </div>
               </div>
+              {isFood && foodWishes.length > 0 && (
+                <div className="mb-3 p-3 bg-surface rounded-[var(--radius-apple)]">
+                  <p className="text-sm font-medium text-text-primary mb-2">
+                    {t("food.wishesTitle", lang)}
+                  </p>
+                  <ul className="space-y-1">
+                    {foodWishes.map((w, i) => (
+                      <li key={i} className="text-sm text-text-secondary">
+                        <span className="font-medium text-text-primary">{w.nickname}:</span>{" "}
+                        {w.text}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {isCollapsible && block.items.length > 0 && (
+                <button
+                  onClick={() =>
+                    setExpandedBlocks((prev) => ({
+                      ...prev,
+                      [block.id]: !prev[block.id],
+                    }))
+                  }
+                  className="flex items-center gap-2 text-sm text-accent hover:underline mb-2"
+                >
+                  <span>{isExpanded ? "▼" : "▶"}</span>
+                  <span>
+                    {isExpanded ? t("common.collapse", lang) : t("common.expand", lang)} (
+                    {block.items.length} {t("common.itemsCount", lang)})
+                  </span>
+                </button>
+              )}
               {block.items.length === 0 ? (
                 <p className="text-sm text-text-tertiary mt-2">
                   {t("stats.noItems", lang)}
                 </p>
-              ) : (
+              ) : isExpanded ? (
                 <div className="mt-3 space-y-2">
                   {block.items.map((item) => {
                     const data = JSON.parse(item.data);
@@ -473,7 +526,7 @@ export default function StatisticsPage() {
                     );
                   })}
                 </div>
-              )}
+              ) : null}
             </Card>
 
             {/* "Никто не берёт" right after equipment block */}
@@ -495,7 +548,8 @@ export default function StatisticsPage() {
               </Card>
             )}
           </div>
-        ))}
+          );
+        })}
 
       {/* Refresh */}
       <div className="text-center pb-4">

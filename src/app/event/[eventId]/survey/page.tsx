@@ -163,6 +163,41 @@ export default function SurveyPage() {
     fetchData();
   }
 
+  async function saveResponse(
+    blockId: string,
+    response: Record<string, unknown>
+  ) {
+    await fetch(`/api/events/${eventId}/responses`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blockId, response }),
+    });
+  }
+
+  async function addBlockItem(
+    blockId: string,
+    name: string,
+    data?: Record<string, unknown>
+  ) {
+    // Pre-save the user's current local response for this block so it
+    // survives the upcoming refetch (fetchData replaces `responses` with
+    // whatever is in the DB).
+    const currentResp = responses[blockId];
+    if (currentResp !== undefined) {
+      await fetch(`/api/events/${eventId}/responses`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blockId, response: currentResp }),
+      });
+    }
+    await fetch(`/api/events/${eventId}/blocks/${blockId}/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, data: data || {} }),
+    });
+    await fetchData();
+  }
+
   if (!user) {
     return (
       <Card className="text-center py-12">
@@ -180,7 +215,7 @@ export default function SurveyPage() {
         <CardTitle>{t("survey.attendance", lang)}</CardTitle>
         <CardDescription>{t("survey.areYouGoing", lang)}</CardDescription>
         <div className="flex gap-2 mt-3">
-          {(["yes", "no", "unknown"] as const).map((v) => (
+          {(["yes", "no"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setAttending(v)}
@@ -190,7 +225,7 @@ export default function SurveyPage() {
                   : "bg-surface text-text-secondary hover:bg-surface/80"
               }`}
             >
-              {v === "yes" ? t("survey.yes", lang) : v === "no" ? t("survey.no", lang) : t("survey.notSure", lang)}
+              {v === "yes" ? t("survey.yes", lang) : t("survey.no", lang)}
             </button>
           ))}
         </div>
@@ -245,6 +280,8 @@ export default function SurveyPage() {
           userId={user.userId}
           onClaim={makeClaim}
           onRemoveClaim={removeClaim}
+          onAddItem={addBlockItem}
+          onSaveResponse={saveResponse}
         />
       ))}
 
@@ -270,6 +307,8 @@ function BlockSurvey({
   userId,
   onClaim,
   onRemoveClaim,
+  onAddItem,
+  onSaveResponse,
 }: {
   block: BlockData;
   response: Record<string, unknown>;
@@ -277,6 +316,8 @@ function BlockSurvey({
   userId: string;
   onClaim: (blockItemId: string, claimType: string, data?: Record<string, unknown>) => void;
   onRemoveClaim: (claimId: string) => void;
+  onAddItem: (blockId: string, name: string, data?: Record<string, unknown>) => Promise<void>;
+  onSaveResponse: (blockId: string, response: Record<string, unknown>) => Promise<void>;
 }) {
   const { lang } = useLang();
   const type = block.type;
@@ -290,80 +331,24 @@ function BlockSurvey({
 
   if (type === "alcohol") {
     return (
-      <Card>
-        <CardTitle>{block.title}</CardTitle>
-        <CardDescription>{t("survey.whatDrink", lang)}</CardDescription>
-        <div className="flex flex-wrap gap-2 mt-3">
-          {alcoholOptions.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => {
-                onUpdate("preference", opt.key);
-                if (opt.key !== "only") {
-                  onUpdate("types", []);
-                }
-              }}
-              className={`px-4 py-2 rounded-[var(--radius-apple)] text-sm font-medium transition-all ${
-                response.preference === opt.key
-                  ? "bg-accent text-white"
-                  : "bg-surface text-text-secondary hover:bg-surface/80"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {response.preference === "only" && (
-          <div className="mt-3">
-            <p className="text-sm text-text-secondary mb-2">
-              {t("survey.selectDrinks", lang)}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {block.items.map((item) => {
-                const data = JSON.parse(item.data);
-                const selected = ((response.types as string[]) || []).includes(item.name);
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      const current = (response.types as string[]) || [];
-                      onUpdate(
-                        "types",
-                        selected
-                          ? current.filter((t) => t !== item.name)
-                          : [...current, item.name]
-                      );
-                    }}
-                    className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-                      selected
-                        ? "bg-accent text-white"
-                        : "bg-surface text-text-secondary"
-                    }`}
-                  >
-                    {item.name}
-                    {data.cost !== undefined && (
-                      <span className="ml-1 opacity-70">{t("common.priceLabel", lang)} – {data.cost}</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {/* Show cost info for "all" */}
-        {response.preference === "all" && block.items.some(i => JSON.parse(i.data).cost) && (
-          <div className="mt-3 space-y-1">
-            {block.items.map((item) => {
-              const data = JSON.parse(item.data);
-              return data.cost ? (
-                <p key={item.id} className="text-xs text-text-secondary">
-                  {item.name}: {t("common.priceLabel", lang)} – {data.cost}
-                </p>
-              ) : null;
-            })}
-          </div>
-        )}
-      </Card>
+      <AlcoholBlockSurvey
+        block={block}
+        response={response}
+        onUpdate={onUpdate}
+        onAddItem={onAddItem}
+        alcoholOptions={alcoholOptions}
+      />
+    );
+  }
+
+  if (type === "food") {
+    return (
+      <FoodBlockSurvey
+        block={block}
+        response={response}
+        onUpdate={onUpdate}
+        onSaveResponse={onSaveResponse}
+      />
     );
   }
 
@@ -562,9 +547,10 @@ function BlockSurvey({
         <div className="mt-3 space-y-2">
           {block.items.map((item) => {
             const data = JSON.parse(item.data);
-            const myClaim = item.claims.find(
-              (c) => c.claimType === "bring" && c.user.id === userId
-            );
+            const bringClaims = item.claims.filter((c) => c.claimType === "bring");
+            const myClaim = bringClaims.find((c) => c.user.id === userId);
+            const someoneBringing = bringClaims.length > 0;
+            const isClosed = data.itemMode !== "buy" && someoneBringing;
 
             return (
               <div
@@ -573,7 +559,13 @@ function BlockSurvey({
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{item.name}</span>
+                    <span
+                      className={`text-sm font-medium ${
+                        isClosed ? "line-through text-text-tertiary" : ""
+                      }`}
+                    >
+                      {item.name}
+                    </span>
                     {data.quantity && (
                       <span className="text-text-secondary text-xs">({data.quantity})</span>
                     )}
@@ -590,13 +582,13 @@ function BlockSurvey({
                       {data.buyerName && ` (${data.buyerName})`}
                     </p>
                   )}
-                  {item.claims.filter((c) => c.claimType === "bring").length > 0 && (
+                  {bringClaims.length > 0 && (
                     <div className="flex gap-1 mt-1">
-                      {item.claims
-                        .filter((c) => c.claimType === "bring")
-                        .map((c) => (
-                          <Badge key={c.id} variant="success">{c.user.nickname} {t("stats.brings", lang)}</Badge>
-                        ))}
+                      {bringClaims.map((c) => (
+                        <Badge key={c.id} variant="success">
+                          {c.user.nickname} {t("stats.brings", lang)}
+                        </Badge>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -605,11 +597,11 @@ function BlockSurvey({
                     <Button size="sm" variant="destructive" onClick={() => onRemoveClaim(myClaim.id)}>
                       {t("survey.dontBring", lang)}
                     </Button>
-                  ) : (
+                  ) : !someoneBringing ? (
                     <Button size="sm" variant="secondary" onClick={() => onClaim(item.id, "bring")}>
                       {t("survey.bring", lang)}
                     </Button>
-                  )
+                  ) : null
                 )}
               </div>
             );
@@ -710,7 +702,7 @@ function BlockSurvey({
     );
   }
 
-  // Default: food, day_food, custom
+  // Default: day_food, custom
   return (
     <Card>
       <CardTitle>{block.title}</CardTitle>
@@ -746,6 +738,322 @@ function BlockSurvey({
           })}
         </div>
       )}
+    </Card>
+  );
+}
+
+function AlcoholBlockSurvey({
+  block,
+  response,
+  onUpdate,
+  onAddItem,
+  alcoholOptions,
+}: {
+  block: BlockData;
+  response: Record<string, unknown>;
+  onUpdate: (key: string, value: unknown) => void;
+  onAddItem: (blockId: string, name: string, data?: Record<string, unknown>) => Promise<void>;
+  alcoholOptions: { key: string; label: string }[];
+}) {
+  const { lang } = useLang();
+  const [proposalOpen, setProposalOpen] = useState(false);
+  const [proposalName, setProposalName] = useState("");
+  const [proposalQty, setProposalQty] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submitProposal() {
+    const name = proposalName.trim();
+    if (!name || submitting) return;
+    setSubmitting(true);
+    const data: Record<string, unknown> = {};
+    if (proposalQty.trim()) data.quantity = proposalQty.trim();
+    await onAddItem(block.id, name, data);
+    // Auto-select the new item in user's "only" list
+    const current = (response.types as string[]) || [];
+    if (!current.includes(name)) {
+      onUpdate("types", [...current, name]);
+    }
+    setProposalName("");
+    setProposalQty("");
+    setProposalOpen(false);
+    setSubmitting(false);
+  }
+
+  return (
+    <Card>
+      <CardTitle>{block.title}</CardTitle>
+      <CardDescription>{t("survey.whatDrink", lang)}</CardDescription>
+      <div className="flex flex-wrap gap-2 mt-3">
+        {alcoholOptions.map((opt) => (
+          <button
+            key={opt.key}
+            onClick={() => {
+              onUpdate("preference", opt.key);
+              if (opt.key !== "only") {
+                onUpdate("types", []);
+              }
+            }}
+            className={`px-4 py-2 rounded-[var(--radius-apple)] text-sm font-medium transition-all ${
+              response.preference === opt.key
+                ? "bg-accent text-white"
+                : "bg-surface text-text-secondary hover:bg-surface/80"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {response.preference === "only" && (
+        <div className="mt-3">
+          <p className="text-sm text-text-secondary mb-2">
+            {t("survey.selectDrinks", lang)}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {block.items.map((item) => {
+              const data = JSON.parse(item.data);
+              const selected = ((response.types as string[]) || []).includes(item.name);
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    const current = (response.types as string[]) || [];
+                    onUpdate(
+                      "types",
+                      selected
+                        ? current.filter((t) => t !== item.name)
+                        : [...current, item.name]
+                    );
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+                    selected
+                      ? "bg-accent text-white"
+                      : "bg-surface text-text-secondary"
+                  }`}
+                >
+                  {item.name}
+                  {data.cost !== undefined && (
+                    <span className="ml-1 opacity-70">{t("common.priceLabel", lang)} – {data.cost}</span>
+                  )}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setProposalOpen((v) => !v)}
+              className={`px-3 py-1.5 rounded-full text-sm transition-all border border-dashed ${
+                proposalOpen
+                  ? "border-accent text-accent"
+                  : "border-border text-text-secondary hover:border-accent hover:text-accent"
+              }`}
+            >
+              + {t("alcohol.myProposal", lang)}
+            </button>
+          </div>
+
+          {proposalOpen && (
+            <div className="mt-3 p-3 bg-surface rounded-[var(--radius-apple)] space-y-2">
+              <input
+                value={proposalName}
+                onChange={(e) => setProposalName(e.target.value)}
+                placeholder={t("alcohol.proposalNamePlaceholder", lang)}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitProposal();
+                  }
+                  if (e.key === "Escape") {
+                    setProposalOpen(false);
+                    setProposalName("");
+                    setProposalQty("");
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary placeholder:text-text-tertiary text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+              />
+              <input
+                value={proposalQty}
+                onChange={(e) => setProposalQty(e.target.value)}
+                placeholder={t("alcohol.proposalQtyPlaceholder", lang)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    submitProposal();
+                  }
+                }}
+                className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary placeholder:text-text-tertiary text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+              />
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={submitProposal}
+                  disabled={!proposalName.trim() || submitting}
+                >
+                  {t("alcohol.proposalAdd", lang)}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setProposalOpen(false);
+                    setProposalName("");
+                    setProposalQty("");
+                  }}
+                >
+                  {t("alcohol.proposalCancel", lang)}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Show cost info for "all" */}
+      {response.preference === "all" && block.items.some(i => JSON.parse(i.data).cost) && (
+        <div className="mt-3 space-y-1">
+          {block.items.map((item) => {
+            const data = JSON.parse(item.data);
+            return data.cost ? (
+              <p key={item.id} className="text-xs text-text-secondary">
+                {item.name}: {t("common.priceLabel", lang)} – {data.cost}
+              </p>
+            ) : null;
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function FoodBlockSurvey({
+  block,
+  response,
+  onUpdate,
+  onSaveResponse,
+}: {
+  block: BlockData;
+  response: Record<string, unknown>;
+  onUpdate: (key: string, value: unknown) => void;
+  onSaveResponse: (blockId: string, response: Record<string, unknown>) => Promise<void>;
+}) {
+  const { lang } = useLang();
+  const [expanded, setExpanded] = useState(false);
+  const savedWish = (response.wishes as string) || "";
+  const [wishOpen, setWishOpen] = useState(false);
+  const [wishDraft, setWishDraft] = useState(savedWish);
+  const [wishSaving, setWishSaving] = useState(false);
+
+  function openWishForm() {
+    setWishDraft(savedWish);
+    setWishOpen(true);
+  }
+
+  function cancelWishForm() {
+    setWishOpen(false);
+    setWishDraft(savedWish);
+  }
+
+  async function submitWish() {
+    if (wishSaving) return;
+    setWishSaving(true);
+    const text = wishDraft.trim();
+    // Update local state so it merges with other in-flight responses for this block
+    onUpdate("wishes", text);
+    // Persist immediately so the wish survives navigation away from /survey.
+    // We deliberately don't refetch — local state is already correct.
+    const merged = { ...response, wishes: text };
+    await onSaveResponse(block.id, merged);
+    setWishSaving(false);
+    setWishOpen(false);
+  }
+
+  return (
+    <Card>
+      <CardTitle>{block.title}</CardTitle>
+      {block.items.length > 0 && (
+        <div className="mt-3">
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-2 text-sm text-accent hover:underline"
+          >
+            <span>{expanded ? "▼" : "▶"}</span>
+            <span>
+              {expanded ? t("common.collapse", lang) : t("common.expand", lang)} (
+              {block.items.length} {t("common.itemsCount", lang)})
+            </span>
+          </button>
+          {expanded && (
+            <div className="mt-2 space-y-1">
+              {block.items.map((item) => {
+                const data = JSON.parse(item.data);
+                return (
+                  <div
+                    key={item.id}
+                    className="text-sm py-1 border-b border-border-light last:border-0"
+                  >
+                    <span className="font-medium">{item.name}</span>
+                    {data.quantity && (
+                      <span className="text-text-secondary ml-2">— {data.quantity}</span>
+                    )}
+                    {data.cost !== undefined && data.cost !== "" && (
+                      <span className="text-accent ml-2">
+                        {t("common.priceLabel", lang)} – {data.cost}
+                        {data.buyerName && (
+                          <span className="text-text-secondary"> ({data.buyerName})</span>
+                        )}
+                      </span>
+                    )}
+                    {data.source && (
+                      <span className="text-text-tertiary ml-2">({data.source})</span>
+                    )}
+                    {data.notes && (
+                      <p className="text-xs text-text-tertiary">{data.notes}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-4">
+        {savedWish && !wishOpen && (
+          <p className="text-sm text-text-secondary mb-2">
+            <span className="font-medium text-text-primary">
+              {t("food.yourWish", lang)}
+            </span>{" "}
+            {savedWish}
+          </p>
+        )}
+
+        {!wishOpen ? (
+          <button
+            onClick={openWishForm}
+            className="text-sm text-accent hover:underline"
+          >
+            + {savedWish ? t("food.editWishBtn", lang) : t("food.addWishBtn", lang)}
+          </button>
+        ) : (
+          <div className="space-y-2">
+            <textarea
+              value={wishDraft}
+              onChange={(e) => setWishDraft(e.target.value)}
+              placeholder={t("food.wishesPlaceholder", lang)}
+              rows={2}
+              autoFocus
+              className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary placeholder:text-text-tertiary text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent resize-none"
+            />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={submitWish} disabled={wishSaving}>
+                {t("food.saveWishBtn", lang)}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={cancelWishForm}>
+                {t("food.cancelWishBtn", lang)}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </Card>
   );
 }
