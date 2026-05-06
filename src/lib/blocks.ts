@@ -1,6 +1,7 @@
 export type BlockType =
   | "date_place"
   | "food"
+  | "menu"
   | "alcohol"
   | "tent"
   | "equipment"
@@ -38,6 +39,15 @@ export const BLOCK_TYPES: Record<BlockType, BlockTypeConfig> = {
     defaultTitle: "Еда и продукты",
     hasCostSplitting: true,
     splitDefault: "all",
+    allowMultiple: false,
+  },
+  menu: {
+    key: "menu",
+    label: "Меню",
+    icon: "chef-hat",
+    defaultTitle: "Меню",
+    hasCostSplitting: false,
+    splitDefault: "none",
     allowMultiple: false,
   },
   alcohol: {
@@ -125,6 +135,65 @@ export const BLOCK_TYPES: Record<BlockType, BlockTypeConfig> = {
 
 export function getBlockConfig(type: string): BlockTypeConfig | undefined {
   return BLOCK_TYPES[type as BlockType];
+}
+
+export type Meal = "breakfast" | "lunch" | "dinner";
+
+const ALL_MEALS: Meal[] = ["breakfast", "lunch", "dinner"];
+
+function timeBucket(time: string): "morning" | "afternoon" | "evening" {
+  const [h] = time.split(":").map(Number);
+  if (Number.isNaN(h)) return "morning";
+  if (h < 12) return "morning";
+  if (h < 17) return "afternoon";
+  return "evening";
+}
+
+const FIRST_DAY_MEALS: Record<"morning" | "afternoon" | "evening", Meal[]> = {
+  morning: ["breakfast", "lunch", "dinner"],
+  afternoon: ["lunch", "dinner"],
+  evening: ["dinner"],
+};
+
+const LAST_DAY_MEALS: Record<"morning" | "afternoon" | "evening", Meal[]> = {
+  morning: ["breakfast"],
+  afternoon: ["breakfast", "lunch"],
+  evening: ["breakfast", "lunch", "dinner"],
+};
+
+export function getAvailableMeals(
+  startTime: string | undefined,
+  endTime: string | undefined,
+  dayIndex: number,
+  totalDays: number
+): Meal[] {
+  if (totalDays <= 0) return [];
+  const isFirst = dayIndex === 0;
+  const isLast = dayIndex === totalDays - 1;
+  if (totalDays === 1) {
+    if (!startTime || !endTime) return [...ALL_MEALS];
+    const startMeals = new Set(FIRST_DAY_MEALS[timeBucket(startTime)]);
+    const endMeals = new Set(LAST_DAY_MEALS[timeBucket(endTime)]);
+    return ALL_MEALS.filter((m) => startMeals.has(m) && endMeals.has(m));
+  }
+  if (isFirst) return startTime ? FIRST_DAY_MEALS[timeBucket(startTime)] : [...ALL_MEALS];
+  if (isLast) return endTime ? LAST_DAY_MEALS[timeBucket(endTime)] : [...ALL_MEALS];
+  return [...ALL_MEALS];
+}
+
+export function getEventDayDates(
+  startDate: string | undefined,
+  totalDays: number
+): string[] {
+  if (!startDate || totalDays <= 0) return [];
+  const result: string[] = [];
+  const base = new Date(startDate);
+  for (let i = 0; i < totalDays; i++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    result.push(d.toISOString().slice(0, 10));
+  }
+  return result;
 }
 
 export function formatDateRu(dateStr: string): string {

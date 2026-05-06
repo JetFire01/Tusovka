@@ -1,12 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useEventSync } from "@/hooks/useEventSync";
 import { Card, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { formatDateRu } from "@/lib/blocks";
+import {
+  formatDateRu,
+  getAvailableMeals,
+  getEventDayDates,
+} from "@/lib/blocks";
+import { MealCell, groupMenuItems } from "@/components/MenuBlock";
 import { useLang, t } from "@/lib/i18n";
 
 interface BlockData {
@@ -32,11 +38,12 @@ interface ParticipantData {
   attending: string;
   arrivalDay: number | null;
   userId: string;
-  surveyResponses: { blockId: string; response: string }[];
+  surveyResponses: { blockId: string; response: string; version: number }[];
 }
 
 interface EventInfo {
   id: string;
+  createdBy: string | null;
   blocks: BlockData[];
   participants: (ParticipantData & { user: { id: string; nickname: string } })[];
 }
@@ -48,19 +55,28 @@ export default function SurveyPage() {
   const { user } = useAuth();
   const { lang } = useLang();
   const [blocks, setBlocks] = useState<BlockData[]>([]);
+  const [participants, setParticipants] = useState<
+    EventInfo["participants"]
+  >([]);
+  const [createdBy, setCreatedBy] = useState<string | null>(null);
   const [attending, setAttending] = useState("yes");
   const [startDateStr, setStartDateStr] = useState("");
   const [endDateStr, setEndDateStr] = useState("");
   const [eventStartDate, setEventStartDate] = useState("");
   const [eventEndDate, setEventEndDate] = useState("");
   const [responses, setResponses] = useState<Record<string, Record<string, unknown>>>({});
+  const [responseVersions, setResponseVersions] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
+  const [conflictNotice, setConflictNotice] = useState<string | null>(null);
+  const dirtyRef = useRef(false);
 
   const fetchData = useCallback(async () => {
     const res = await fetch(`/api/events/${eventId}`);
     if (res.ok) {
       const data: EventInfo = await res.json();
       setBlocks(data.blocks);
+      setParticipants(data.participants);
+      setCreatedBy(data.createdBy ?? null);
 
       // Get event dates from date_place block
       const datePlaceBlock = data.blocks.find((b) => b.type === "date_place");
@@ -77,10 +93,13 @@ export default function SurveyPage() {
         setAttending(myParticipant.attending);
 
         const existing: Record<string, Record<string, unknown>> = {};
+        const versions: Record<string, number> = {};
         for (const sr of myParticipant.surveyResponses) {
           existing[sr.blockId] = JSON.parse(sr.response);
+          versions[sr.blockId] = sr.version;
         }
         setResponses(existing);
+        setResponseVersions(versions);
 
         // Load saved dates
         const attendanceResp = existing[data.blocks.find(b => b.type === "date_place")?.id || ""];
@@ -93,20 +112,67 @@ export default function SurveyPage() {
   }, [eventId, user?.userId]);
 
   useEffect(() => {
-    fetchData();
+    let cancelled = false;
+    (async () => {
+      if (cancelled) return;
+      await fetchData();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [fetchData]);
 
+  useEventSync(eventId, {
+    onChange: () => {
+      if (!dirtyRef.current) fetchData();
+    },
+    pause: () => dirtyRef.current,
+  });
+
+  function markDirty() {
+    dirtyRef.current = true;
+  }
+
   function updateResponse(blockId: string, key: string, value: unknown) {
+    markDirty();
     setResponses((prev) => ({
       ...prev,
       [blockId]: { ...(prev[blockId] || {}), [key]: value },
     }));
   }
 
+  async function putResponse(
+    blockId: string,
+    response: Record<string, unknown>
+  ): Promise<{ ok: boolean; conflict?: boolean }> {
+    const expectedVersion = responseVersions[blockId] ?? 0;
+    const res = await fetch(`/api/events/${eventId}/responses`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blockId, response, expectedVersion }),
+    });
+    if (res.status === 409) {
+      const data = await res.json();
+      if (data.current) {
+        setResponses((prev) => ({ ...prev, [blockId]: data.current.response }));
+        setResponseVersions((prev) => ({ ...prev, [blockId]: data.current.version }));
+      }
+      return { ok: false, conflict: true };
+    }
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.version === "number") {
+        setResponseVersions((prev) => ({ ...prev, [blockId]: data.version }));
+      }
+      return { ok: true };
+    }
+    return { ok: false };
+  }
+
   async function handleSave() {
     setSaving(true);
+    setConflictNotice(null);
 
-    // Save attendance
     await fetch(`/api/events/${eventId}/responses`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -116,30 +182,32 @@ export default function SurveyPage() {
       }),
     });
 
-    // Save attendance dates in date_place block response
+    let anyConflict = false;
+
     const datePlaceBlock = blocks.find((b) => b.type === "date_place");
     if (datePlaceBlock) {
-      await fetch(`/api/events/${eventId}/responses`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          blockId: datePlaceBlock.id,
-          response: { startDate: startDateStr, endDate: endDateStr },
-        }),
+      const r = await putResponse(datePlaceBlock.id, {
+        startDate: startDateStr,
+        endDate: endDateStr,
       });
+      if (r.conflict) anyConflict = true;
     }
 
-    // Save each block response
     for (const [blockId, response] of Object.entries(responses)) {
-      await fetch(`/api/events/${eventId}/responses`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blockId, response }),
-      });
+      const r = await putResponse(blockId, response);
+      if (r.conflict) anyConflict = true;
     }
 
     setSaving(false);
-    // Redirect to statistics after saving
+
+    if (anyConflict) {
+      setConflictNotice(
+        "Часть данных была обновлена параллельно — мы подтянули свежую версию. Проверьте и сохраните ещё раз."
+      );
+      return;
+    }
+
+    dirtyRef.current = false;
     router.push(`/event/${eventId}/statistics`);
   }
 
@@ -167,11 +235,17 @@ export default function SurveyPage() {
     blockId: string,
     response: Record<string, unknown>
   ) {
-    await fetch(`/api/events/${eventId}/responses`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ blockId, response }),
-    });
+    const r = await putResponse(blockId, response);
+    if (r.conflict) {
+      setConflictNotice(
+        "Эти данные изменили параллельно — мы подтянули свежую версию."
+      );
+      return;
+    }
+    if (r.ok) {
+      // No outstanding edits to this block now that server accepted ours.
+      dirtyRef.current = false;
+    }
   }
 
   async function addBlockItem(
@@ -179,22 +253,30 @@ export default function SurveyPage() {
     name: string,
     data?: Record<string, unknown>
   ) {
-    // Pre-save the user's current local response for this block so it
-    // survives the upcoming refetch (fetchData replaces `responses` with
-    // whatever is in the DB).
     const currentResp = responses[blockId];
     if (currentResp !== undefined) {
-      await fetch(`/api/events/${eventId}/responses`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blockId, response: currentResp }),
-      });
+      const r = await putResponse(blockId, currentResp);
+      if (r.conflict) {
+        setConflictNotice(
+          "Этот блок изменили параллельно — мы подтянули свежую версию. Попробуйте добавить ещё раз."
+        );
+        return;
+      }
     }
     await fetch(`/api/events/${eventId}/blocks/${blockId}/items`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, data: data || {} }),
     });
+    dirtyRef.current = false;
+    await fetchData();
+  }
+
+  async function removeBlockItem(blockId: string, itemId: string) {
+    await fetch(
+      `/api/events/${eventId}/blocks/${blockId}/items?itemId=${itemId}`,
+      { method: "DELETE" }
+    );
     await fetchData();
   }
 
@@ -210,6 +292,18 @@ export default function SurveyPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">{t("survey.title", lang)}</h1>
 
+      {conflictNotice && (
+        <div className="rounded-[var(--radius-apple)] border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-200 flex items-start justify-between gap-3">
+          <span>{conflictNotice}</span>
+          <button
+            onClick={() => setConflictNotice(null)}
+            className="text-xs underline shrink-0"
+          >
+            закрыть
+          </button>
+        </div>
+      )}
+
       {/* Attendance */}
       <Card>
         <CardTitle>{t("survey.attendance", lang)}</CardTitle>
@@ -218,7 +312,10 @@ export default function SurveyPage() {
           {(["yes", "no"] as const).map((v) => (
             <button
               key={v}
-              onClick={() => setAttending(v)}
+              onClick={() => {
+                markDirty();
+                setAttending(v);
+              }}
               className={`px-4 py-2 rounded-[var(--radius-apple)] text-sm font-medium transition-all ${
                 attending === v
                   ? "bg-accent text-white"
@@ -239,7 +336,10 @@ export default function SurveyPage() {
                   min={eventStartDate}
                   max={eventEndDate || eventStartDate}
                   value={startDateStr}
-                  onChange={(e) => setStartDateStr(e.target.value)}
+                  onChange={(e) => {
+                    markDirty();
+                    setStartDateStr(e.target.value);
+                  }}
                   className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
                 />
               </div>
@@ -250,7 +350,10 @@ export default function SurveyPage() {
                   min={startDateStr || eventStartDate}
                   max={eventEndDate || eventStartDate}
                   value={endDateStr}
-                  onChange={(e) => setEndDateStr(e.target.value)}
+                  onChange={(e) => {
+                    markDirty();
+                    setEndDateStr(e.target.value);
+                  }}
                   className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
                 />
               </div>
@@ -275,12 +378,16 @@ export default function SurveyPage() {
         <BlockSurvey
           key={block.id}
           block={block}
+          allBlocks={blocks}
+          participants={participants}
+          createdBy={createdBy}
           response={responses[block.id] || {}}
           onUpdate={(key, value) => updateResponse(block.id, key, value)}
           userId={user.userId}
           onClaim={makeClaim}
           onRemoveClaim={removeClaim}
           onAddItem={addBlockItem}
+          onDeleteItem={(itemId) => removeBlockItem(block.id, itemId)}
           onSaveResponse={saveResponse}
         />
       ))}
@@ -302,25 +409,47 @@ export default function SurveyPage() {
 
 function BlockSurvey({
   block,
+  allBlocks,
+  participants,
+  createdBy,
   response,
   onUpdate,
   userId,
   onClaim,
   onRemoveClaim,
   onAddItem,
+  onDeleteItem,
   onSaveResponse,
 }: {
   block: BlockData;
+  allBlocks: BlockData[];
+  participants: EventInfo["participants"];
+  createdBy: string | null;
   response: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
   userId: string;
   onClaim: (blockItemId: string, claimType: string, data?: Record<string, unknown>) => void;
   onRemoveClaim: (claimId: string) => void;
   onAddItem: (blockId: string, name: string, data?: Record<string, unknown>) => Promise<void>;
+  onDeleteItem: (itemId: string) => void;
   onSaveResponse: (blockId: string, response: Record<string, unknown>) => Promise<void>;
 }) {
   const { lang } = useLang();
   const type = block.type;
+
+  if (type === "menu") {
+    return (
+      <MenuBlockSurvey
+        block={block}
+        allBlocks={allBlocks}
+        participants={participants}
+        createdBy={createdBy}
+        userId={userId}
+        onAddItem={onAddItem}
+        onDeleteItem={onDeleteItem}
+      />
+    );
+  }
 
   // Alcohol preference keys (stored in DB) → display labels
   const alcoholOptions = [
@@ -1054,6 +1183,120 @@ function FoodBlockSurvey({
           </div>
         )}
       </div>
+    </Card>
+  );
+}
+
+function MenuBlockSurvey({
+  block,
+  allBlocks,
+  participants,
+  createdBy,
+  userId,
+  onAddItem,
+  onDeleteItem,
+}: {
+  block: BlockData;
+  allBlocks: BlockData[];
+  participants: EventInfo["participants"];
+  createdBy: string | null;
+  userId: string;
+  onAddItem: (blockId: string, name: string, data?: Record<string, unknown>) => Promise<void>;
+  onDeleteItem: (itemId: string) => void;
+}) {
+  const { lang } = useLang();
+  const [expanded, setExpanded] = useState(false);
+
+  const dp = allBlocks.find((b) => b.type === "date_place");
+  let startDate: string | undefined;
+  let endDate: string | undefined;
+  let startTime: string | undefined;
+  let endTime: string | undefined;
+  if (dp) {
+    try {
+      const cfg = JSON.parse(dp.config);
+      startDate = cfg.startDate || undefined;
+      endDate = cfg.endDate || undefined;
+      startTime = cfg.startTime || undefined;
+      endTime = cfg.endTime || undefined;
+    } catch {}
+  }
+
+  const totalDays = !startDate
+    ? 0
+    : !endDate
+    ? 1
+    : Math.max(
+        1,
+        Math.floor(
+          (new Date(endDate).getTime() - new Date(startDate).getTime()) /
+            86400000
+        ) + 1
+      );
+  const dates = getEventDayDates(startDate, totalDays);
+  const itemsByCell = groupMenuItems(block.items);
+  const nicknameByUserId = new Map<string, string>();
+  for (const p of participants) nicknameByUserId.set(p.user.id, p.user.nickname);
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between">
+        <CardTitle>{block.title}</CardTitle>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? t("menu.collapse", lang) : t("menu.expand", lang)}
+        </Button>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 space-y-4">
+          {totalDays === 0 ? (
+            <p className="text-sm text-text-tertiary">
+              {t("menu.noDates", lang)}
+            </p>
+          ) : (
+            dates.map((date, dayIndex) => {
+              const meals = getAvailableMeals(
+                startTime,
+                endTime,
+                dayIndex,
+                totalDays
+              );
+              return (
+                <div
+                  key={dayIndex}
+                  className="border border-border rounded-[var(--radius-apple)] p-3"
+                >
+                  <div className="text-sm font-medium mb-2">
+                    {formatDateRu(date)}
+                  </div>
+                  <div className="space-y-3">
+                    {meals.map((meal) => (
+                      <MealCell
+                        key={meal}
+                        meal={meal}
+                        items={itemsByCell.get(`${dayIndex}:${meal}`) || []}
+                        onAdd={(name) =>
+                          onAddItem(block.id, name, { dayIndex, meal })
+                        }
+                        onDelete={onDeleteItem}
+                        lang={lang}
+                        adminMode={false}
+                        currentUserId={userId}
+                        nicknameByUserId={nicknameByUserId}
+                        adminUserId={createdBy}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
     </Card>
   );
 }

@@ -1,11 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useEventSync } from "@/hooks/useEventSync";
 import { useParams } from "next/navigation";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { formatDateRu } from "@/lib/blocks";
+import {
+  formatDateRu,
+  getAvailableMeals,
+  getEventDayDates,
+  Meal,
+} from "@/lib/blocks";
+import { groupMenuItems, mealLabel } from "@/components/MenuBlock";
 import { calculateFinances, FinanceResult } from "@/lib/money";
 import { useLang, t } from "@/lib/i18n";
 
@@ -13,6 +20,7 @@ interface EventData {
   id: string;
   title: string;
   description: string | null;
+  createdBy: string | null;
   participants: {
     id: string;
     attending: string;
@@ -77,8 +85,20 @@ export default function StatisticsPage() {
   }, [eventId]);
 
   useEffect(() => {
-    fetchEvent();
+    let cancelled = false;
+    (async () => {
+      if (cancelled) return;
+      await fetchEvent();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [fetchEvent]);
+
+  useEventSync(eventId, {
+    onChange: fetchEvent,
+    pause: () => editingDesc,
+  });
 
   if (!event) {
     return (
@@ -382,6 +402,19 @@ export default function StatisticsPage() {
       {event.blocks
         .filter((b) => b.type !== "date_place")
         .map((block, idx, arr) => {
+          if (block.type === "menu") {
+            return (
+              <MenuStatsCard
+                key={block.id}
+                block={block}
+                allBlocks={event.blocks}
+                participants={event.participants}
+                createdBy={event.createdBy ?? null}
+                onMoveUp={idx > 0 ? () => moveBlock(block.id, "up") : undefined}
+                onMoveDown={idx < arr.length - 1 ? () => moveBlock(block.id, "down") : undefined}
+              />
+            );
+          }
           const isFood = block.type === "food";
           const isAlcohol = block.type === "alcohol";
           const isCollapsible = isFood || isAlcohol;
@@ -560,6 +593,150 @@ export default function StatisticsPage() {
           {t("stats.refresh", lang)}
         </button>
       </div>
+    </div>
+  );
+}
+
+function MenuStatsCard({
+  block,
+  allBlocks,
+  participants,
+  createdBy,
+  onMoveUp,
+  onMoveDown,
+}: {
+  block: EventData["blocks"][number];
+  allBlocks: EventData["blocks"];
+  participants: EventData["participants"];
+  createdBy: string | null;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+}) {
+  const { lang } = useLang();
+  const dp = allBlocks.find((b) => b.type === "date_place");
+  let startDate: string | undefined;
+  let endDate: string | undefined;
+  let startTime: string | undefined;
+  let endTime: string | undefined;
+  if (dp) {
+    try {
+      const cfg = JSON.parse(dp.config);
+      startDate = cfg.startDate || undefined;
+      endDate = cfg.endDate || undefined;
+      startTime = cfg.startTime || undefined;
+      endTime = cfg.endTime || undefined;
+    } catch {}
+  }
+
+  const totalDays = !startDate
+    ? 0
+    : !endDate
+    ? 1
+    : Math.max(
+        1,
+        Math.floor(
+          (new Date(endDate).getTime() - new Date(startDate).getTime()) /
+            86400000
+        ) + 1
+      );
+  const dates = getEventDayDates(startDate, totalDays);
+  const itemsByCell = groupMenuItems(block.items);
+  const nickById = new Map<string, string>();
+  for (const p of participants) nickById.set(p.user.id, p.user.nickname);
+
+  return (
+    <div>
+      <Card>
+        <div className="flex items-center justify-between mb-2">
+          <CardTitle>{block.title}</CardTitle>
+          <div className="flex gap-0.5 items-center">
+            {onMoveUp && (
+              <button
+                onClick={onMoveUp}
+                className="px-1.5 py-1 text-text-secondary hover:text-text-primary transition-colors text-lg leading-none"
+              >
+                ↑
+              </button>
+            )}
+            {onMoveDown && (
+              <button
+                onClick={onMoveDown}
+                className="px-1.5 py-1 text-text-secondary hover:text-text-primary transition-colors text-lg leading-none"
+              >
+                ↓
+              </button>
+            )}
+          </div>
+        </div>
+
+        {totalDays === 0 ? (
+          <p className="text-sm text-text-tertiary">
+            {t("menu.noDates", lang)}
+          </p>
+        ) : block.items.length === 0 ? (
+          <p className="text-sm text-text-tertiary">{t("stats.noItems", lang)}</p>
+        ) : (
+          <div className="space-y-3">
+            {dates.map((date, dayIndex) => {
+              const meals: Meal[] = getAvailableMeals(
+                startTime,
+                endTime,
+                dayIndex,
+                totalDays
+              );
+              const dayHasItems = meals.some(
+                (m) => (itemsByCell.get(`${dayIndex}:${m}`) || []).length > 0
+              );
+              if (!dayHasItems) return null;
+              return (
+                <div
+                  key={dayIndex}
+                  className="border border-border-light rounded-[var(--radius-apple)] p-3"
+                >
+                  <div className="text-sm font-medium mb-2">
+                    {formatDateRu(date)}
+                  </div>
+                  <div className="space-y-2">
+                    {meals.map((meal) => {
+                      const items =
+                        itemsByCell.get(`${dayIndex}:${meal}`) || [];
+                      if (items.length === 0) return null;
+                      return (
+                        <div key={meal}>
+                          <div className="text-xs uppercase tracking-wide text-text-secondary mb-1">
+                            {mealLabel(meal, lang)}
+                          </div>
+                          <ul className="space-y-1">
+                            {items.map((it) => {
+                              const resolvedOwnerId = it.ownerId ?? createdBy;
+                              const ownerNickname = resolvedOwnerId
+                                ? nickById.get(resolvedOwnerId)
+                                : undefined;
+                              return (
+                                <li
+                                  key={it.id}
+                                  className="flex items-center gap-2 text-sm"
+                                >
+                                  <span>{it.name}</span>
+                                  {ownerNickname && (
+                                    <Badge variant="accent">
+                                      {ownerNickname}
+                                    </Badge>
+                                  )}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

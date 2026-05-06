@@ -1,18 +1,27 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useEventSync } from "@/hooks/useEventSync";
 import { useParams } from "next/navigation";
 import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
-import { BLOCK_TYPES, BlockType, formatDateRu } from "@/lib/blocks";
+import {
+  BLOCK_TYPES,
+  BlockType,
+  formatDateRu,
+  getAvailableMeals,
+  getEventDayDates,
+} from "@/lib/blocks";
+import { MealCell, groupMenuItems } from "@/components/MenuBlock";
 import { useLang, t, Lang } from "@/lib/i18n";
 
 const BLOCK_LABEL_KEYS: Record<BlockType, string> = {
   date_place: "block.datePlace",
   food: "block.food",
+  menu: "block.menu",
   alcohol: "block.alcohol",
   tent: "block.tent",
   equipment: "block.equipment",
@@ -59,6 +68,7 @@ export default function AdminPage() {
   const { lang } = useLang();
   const [blocks, setBlocks] = useState<BlockData[]>([]);
   const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
+  const [createdBy, setCreatedBy] = useState<string | null>(null);
   const [showAddBlock, setShowAddBlock] = useState(false);
   const [editingItem, setEditingItem] = useState<{
     blockId: string;
@@ -71,12 +81,25 @@ export default function AdminPage() {
       const data = await res.json();
       setBlocks(data.blocks);
       setParticipants(data.participants);
+      setCreatedBy(data.createdBy ?? null);
     }
   }, [eventId]);
 
   useEffect(() => {
-    fetchData();
+    let cancelled = false;
+    (async () => {
+      if (cancelled) return;
+      await fetchData();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [fetchData]);
+
+  useEventSync(eventId, {
+    onChange: fetchData,
+    pause: () => showAddBlock || editingItem !== null,
+  });
 
   async function addBlock(type: BlockType) {
     await fetch(`/api/events/${eventId}/blocks`, {
@@ -164,6 +187,8 @@ export default function AdminPage() {
             key={block.id}
             block={block}
             participants={participants}
+            allBlocks={blocks}
+            createdBy={createdBy}
             onAddItem={(name, data) => addItem(block.id, name, data)}
             onUpdateItem={(itemId, name, data) =>
               updateItem(block.id, itemId, name, data)
@@ -206,6 +231,8 @@ export default function AdminPage() {
 function BlockEditor({
   block,
   participants,
+  allBlocks,
+  createdBy,
   onAddItem,
   onUpdateItem,
   onDeleteItem,
@@ -218,6 +245,8 @@ function BlockEditor({
 }: {
   block: BlockData;
   participants: ParticipantInfo[];
+  allBlocks: BlockData[];
+  createdBy: string | null;
   onAddItem: (name: string, data: Record<string, unknown>) => void;
   onUpdateItem: (itemId: string, name: string, data: Record<string, unknown>) => void;
   onDeleteItem: (itemId: string) => void;
@@ -282,6 +311,23 @@ function BlockEditor({
         config={config}
         onUpdateConfig={onUpdateConfig}
         onDeleteBlock={onDeleteBlock}
+      />
+    );
+  }
+
+  if (block.type === "menu") {
+    return (
+      <MenuEditor
+        block={block}
+        allBlocks={allBlocks}
+        participants={participants}
+        createdBy={createdBy}
+        onAddItem={onAddItem}
+        onDeleteItem={onDeleteItem}
+        onDeleteBlock={onDeleteBlock}
+        onMoveUp={onMoveUp}
+        onMoveDown={onMoveDown}
+        adminMode
       />
     );
   }
@@ -405,7 +451,6 @@ function BlockEditor({
                     key={item.id}
                     item={item}
                     data={data}
-                    blockType={block.type}
                     onEdit={() => setEditingItem({ blockId: block.id, item })}
                     onDelete={() => onDeleteItem(item.id)}
                   />
@@ -524,13 +569,11 @@ function DatePlaceEditor({
 function ItemDisplay({
   item,
   data,
-  blockType,
   onEdit,
   onDelete,
 }: {
   item: ItemData;
   data: Record<string, string | number | boolean | undefined>;
-  blockType: string;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -926,3 +969,121 @@ function ItemForm({
     </form>
   );
 }
+
+function readDateConfig(allBlocks: BlockData[]): {
+  startDate?: string;
+  endDate?: string;
+  startTime?: string;
+  endTime?: string;
+} {
+  const dp = allBlocks.find((b) => b.type === "date_place");
+  if (!dp) return {};
+  try {
+    return JSON.parse(dp.config);
+  } catch {
+    return {};
+  }
+}
+
+function dayCount(startDate?: string, endDate?: string): number {
+  if (!startDate) return 0;
+  if (!endDate) return 1;
+  const s = new Date(startDate);
+  const e = new Date(endDate);
+  const ms = e.getTime() - s.getTime();
+  if (ms < 0) return 1;
+  return Math.floor(ms / 86400000) + 1;
+}
+
+function MenuEditor({
+  block,
+  allBlocks,
+  participants,
+  createdBy,
+  onAddItem,
+  onDeleteItem,
+  onDeleteBlock,
+  onMoveUp,
+  onMoveDown,
+}: {
+  block: BlockData;
+  allBlocks: BlockData[];
+  participants: ParticipantInfo[];
+  createdBy: string | null;
+  onAddItem: (name: string, data: Record<string, unknown>) => void;
+  onDeleteItem: (itemId: string) => void;
+  onDeleteBlock: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  adminMode: boolean;
+}) {
+  const { lang } = useLang();
+  const dateCfg = readDateConfig(allBlocks);
+  const totalDays = dayCount(dateCfg.startDate, dateCfg.endDate);
+  const dates = getEventDayDates(dateCfg.startDate, totalDays);
+
+  const itemsByCell = groupMenuItems(block.items);
+  const nicknameByUserId = new Map<string, string>();
+  for (const p of participants) nicknameByUserId.set(p.user.id, p.user.nickname);
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <CardTitle>{block.title}</CardTitle>
+          <Badge variant="accent">{t("block.menu", lang)}</Badge>
+        </div>
+        <div className="flex gap-1 items-center">
+          {onMoveUp && (
+            <button onClick={onMoveUp} className="px-1.5 py-1 text-text-secondary hover:text-text-primary transition-colors text-lg leading-none">↑</button>
+          )}
+          {onMoveDown && (
+            <button onClick={onMoveDown} className="px-1.5 py-1 text-text-secondary hover:text-text-primary transition-colors text-lg leading-none">↓</button>
+          )}
+          <Button size="sm" variant="ghost" onClick={onDeleteBlock}>
+            {t("admin.delete", lang)}
+          </Button>
+        </div>
+      </div>
+
+      {totalDays === 0 ? (
+        <p className="text-sm text-text-tertiary">{t("menu.noDates", lang)}</p>
+      ) : (
+        <div className="space-y-4">
+          {dates.map((date, dayIndex) => {
+            const meals = getAvailableMeals(
+              dateCfg.startTime,
+              dateCfg.endTime,
+              dayIndex,
+              totalDays
+            );
+            return (
+              <div key={dayIndex} className="border border-border rounded-[var(--radius-apple)] p-3">
+                <div className="text-sm font-medium mb-2">{formatDateRu(date)}</div>
+                <div className="space-y-3">
+                  {meals.map((meal) => (
+                    <MealCell
+                      key={meal}
+                      meal={meal}
+                      items={itemsByCell.get(`${dayIndex}:${meal}`) || []}
+                      onAdd={(name) =>
+                        onAddItem(name, { dayIndex, meal })
+                      }
+                      onDelete={onDeleteItem}
+                      lang={lang}
+                      adminMode
+                      currentUserId={createdBy}
+                      nicknameByUserId={nicknameByUserId}
+                      adminUserId={createdBy}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
+

@@ -37,11 +37,12 @@ model Event {
 }
 
 model Participant {
-  id         String @id @default(cuid())
+  id         String   @id @default(cuid())
   eventId    String
   userId     String
-  attending  String @default("unknown")
+  attending  String   @default("unknown")
   arrivalDay Int?
+  updatedAt  DateTime @default(now()) @updatedAt
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [userId], references: [id])
@@ -53,13 +54,14 @@ model Participant {
 }
 
 model Block {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   eventId   String
   type      String
   title     String
-  config    String @default("{}")
-  sortOrder Int    @default(0)
+  config    String   @default("{}")
+  sortOrder Int      @default(0)
   dayIndex  Int?
+  updatedAt DateTime @default(now()) @updatedAt
 
   event           Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
   items           BlockItem[]
@@ -69,10 +71,11 @@ model Block {
 }
 
 model BlockItem {
-  id      String @id @default(cuid())
-  blockId String
-  name    String
-  data    String @default("{}")
+  id        String   @id @default(cuid())
+  blockId   String
+  name      String
+  data      String   @default("{}")
+  updatedAt DateTime @default(now()) @updatedAt
 
   block  Block   @relation(fields: [blockId], references: [id], onDelete: Cascade)
   claims Claim[]
@@ -81,11 +84,12 @@ model BlockItem {
 }
 
 model Claim {
-  id          String @id @default(cuid())
+  id          String   @id @default(cuid())
   blockItemId String
   userId      String
   claimType   String
-  data        String @default("{}")
+  data        String   @default("{}")
+  updatedAt   DateTime @default(now()) @updatedAt
 
   blockItem BlockItem @relation(fields: [blockItemId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id])
@@ -95,10 +99,12 @@ model Claim {
 }
 
 model SurveyResponse {
-  id            String @id @default(cuid())
+  id            String   @id @default(cuid())
   participantId String
   blockId       String
-  response      String @default("{}")
+  response      String   @default("{}")
+  version       Int      @default(0)
+  updatedAt     DateTime @default(now()) @updatedAt
 
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
   block       Block       @relation(fields: [blockId], references: [id], onDelete: Cascade)

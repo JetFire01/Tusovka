@@ -175,6 +175,7 @@ const translations = {
   // Block types (label)
   "block.datePlace": { ru: "Дата и место", en: "Date & Place" },
   "block.food": { ru: "Еда", en: "Food" },
+  "block.menu": { ru: "Меню", en: "Menu" },
   "block.alcohol": { ru: "Алкоголь", en: "Alcohol" },
   "block.tent": { ru: "Палатки", en: "Tents" },
   "block.equipment": { ru: "Оснастка", en: "Equipment" },
@@ -188,6 +189,7 @@ const translations = {
   // Block default titles
   "blockTitle.date_place": { ru: "Дата и место", en: "Date & Place" },
   "blockTitle.food": { ru: "Еда и продукты", en: "Food & Groceries" },
+  "blockTitle.menu": { ru: "Меню", en: "Menu" },
   "blockTitle.alcohol": { ru: "Алкоголь", en: "Alcohol" },
   "blockTitle.tent": { ru: "Палатки и ночлег", en: "Tents & Lodging" },
   "blockTitle.equipment": { ru: "Материалы и оснастка", en: "Supplies & Equipment" },
@@ -197,6 +199,20 @@ const translations = {
   "blockTitle.day_food": { ru: "Паёк на день", en: "Daily Rations" },
   "blockTitle.activities": { ru: "События и мероприятия", en: "Events & Activities" },
   "blockTitle.custom": { ru: "Новый блок", en: "New Block" },
+
+  // Menu block
+  "menu.expand": { ru: "Развернуть меню", en: "Expand menu" },
+  "menu.collapse": { ru: "Свернуть меню", en: "Collapse menu" },
+  "menu.breakfast": { ru: "Завтрак", en: "Breakfast" },
+  "menu.lunch": { ru: "Обед", en: "Lunch" },
+  "menu.dinner": { ru: "Ужин", en: "Dinner" },
+  "menu.addOwn": { ru: "Добавить своё", en: "Add your own" },
+  "menu.add": { ru: "Добавить", en: "Add" },
+  "menu.cancel": { ru: "Отмена", en: "Cancel" },
+  "menu.placeholder": { ru: "Например: шашлык", en: "e.g. shashlik" },
+  "menu.empty": { ru: "Пока нет предложений", en: "No suggestions yet" },
+  "menu.byAdmin": { ru: "от админа", en: "by admin" },
+  "menu.noDates": { ru: "Сначала задайте даты события в блоке «Дата и место».", en: "Please set event dates in the Date & Place block first." },
 
   // Statistics extra
   "stats.name": { ru: "Имя", en: "Name" },
@@ -227,7 +243,7 @@ const translations = {
   "alcohol.proposalCancel": { ru: "Отмена", en: "Cancel" },
 
   // Food — wishes & list
-  "food.wishesTitle": { ru: "Пожелания по еде", en: "Food wishes" },
+  "food.wishesTitle": { ru: "Пожелания по продуктам", en: "Food wishes" },
   "food.wishesPlaceholder": { ru: "Пожелания по еде", en: "Food wishes" },
   "food.addWishBtn": { ru: "Добавить пожелание по еде", en: "Add a food wish" },
   "food.editWishBtn": { ru: "Изменить пожелание", en: "Edit wish" },

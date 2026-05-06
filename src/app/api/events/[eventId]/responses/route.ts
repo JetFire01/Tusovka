@@ -13,9 +13,8 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { blockId, response, attending, arrivalDay } = body;
+  const { blockId, response, attending, arrivalDay, expectedVersion } = body;
 
-  // Update participant info if provided
   if (attending !== undefined || arrivalDay !== undefined) {
     await prisma.participant.update({
       where: {
@@ -28,7 +27,6 @@ export async function PUT(
     });
   }
 
-  // Update survey response if blockId provided
   if (blockId && response !== undefined) {
     const participant = await prisma.participant.findUnique({
       where: {
@@ -43,21 +41,113 @@ export async function PUT(
       );
     }
 
-    await prisma.surveyResponse.upsert({
+    const responseJson = JSON.stringify(response);
+    const existing = await prisma.surveyResponse.findUnique({
       where: {
         participantId_blockId: {
           participantId: participant.id,
           blockId,
         },
       },
-      create: {
-        participantId: participant.id,
-        blockId,
-        response: JSON.stringify(response),
+    });
+
+    if (!existing) {
+      // First save: only allowed when client thinks it's creating (no version or 0).
+      if (expectedVersion !== undefined && expectedVersion !== 0 && expectedVersion !== null) {
+        return NextResponse.json(
+          {
+            error: "conflict",
+            current: { response: {}, version: 0, updatedAt: null },
+          },
+          { status: 409 }
+        );
+      }
+      try {
+        const created = await prisma.surveyResponse.create({
+          data: {
+            participantId: participant.id,
+            blockId,
+            response: responseJson,
+            version: 1,
+          },
+        });
+        return NextResponse.json({
+          ok: true,
+          version: created.version,
+          updatedAt: created.updatedAt,
+        });
+      } catch {
+        // Lost race on unique constraint — refetch and return as conflict.
+        const current = await prisma.surveyResponse.findUnique({
+          where: {
+            participantId_blockId: {
+              participantId: participant.id,
+              blockId,
+            },
+          },
+        });
+        return NextResponse.json(
+          {
+            error: "conflict",
+            current: current
+              ? {
+                  response: JSON.parse(current.response),
+                  version: current.version,
+                  updatedAt: current.updatedAt,
+                }
+              : null,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Update path with version guard.
+    if (expectedVersion === undefined || expectedVersion === null) {
+      return NextResponse.json(
+        { error: "expectedVersion is required for updates" },
+        { status: 400 }
+      );
+    }
+
+    const result = await prisma.surveyResponse.updateMany({
+      where: {
+        id: existing.id,
+        version: expectedVersion,
       },
-      update: {
-        response: JSON.stringify(response),
+      data: {
+        response: responseJson,
+        version: { increment: 1 },
       },
+    });
+
+    if (result.count === 0) {
+      const current = await prisma.surveyResponse.findUnique({
+        where: { id: existing.id },
+      });
+      return NextResponse.json(
+        {
+          error: "conflict",
+          current: current
+            ? {
+                response: JSON.parse(current.response),
+                version: current.version,
+                updatedAt: current.updatedAt,
+              }
+            : null,
+        },
+        { status: 409 }
+      );
+    }
+
+    const fresh = await prisma.surveyResponse.findUnique({
+      where: { id: existing.id },
+      select: { version: true, updatedAt: true },
+    });
+    return NextResponse.json({
+      ok: true,
+      version: fresh?.version,
+      updatedAt: fresh?.updatedAt,
     });
   }
 
