@@ -30,6 +30,7 @@ const BLOCK_LABEL_KEYS: Record<BlockType, string> = {
   film: "block.film",
   day_food: "block.dayFood",
   activities: "block.activities",
+  afterparty: "block.afterparty",
   custom: "block.custom",
 };
 
@@ -582,7 +583,7 @@ function ItemDisplay({
     <div className="flex items-center justify-between py-2 px-3 rounded-[8px] hover:bg-surface transition-colors group">
       <div className="flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm">{item.name}</span>
+          <span className="font-medium text-sm whitespace-pre-wrap">{item.name}</span>
           {data.quantity && (
             <span className="text-text-secondary text-sm">— {String(data.quantity)}</span>
           )}
@@ -817,12 +818,23 @@ function ItemForm({
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Input
-          placeholder={t("form.name", lang)}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoFocus
-        />
+        {blockType === "afterparty" ? (
+          <textarea
+            placeholder={t("afterparty.placeholder", lang)}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            rows={3}
+            autoFocus
+            className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary placeholder:text-text-tertiary text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent resize-y"
+          />
+        ) : (
+          <Input
+            placeholder={t("form.name", lang)}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus
+          />
+        )}
         {showQuantity && (
           <Input
             placeholder={t("form.quantity", lang)}
@@ -1018,13 +1030,24 @@ function MenuEditor({
   adminMode: boolean;
 }) {
   const { lang } = useLang();
+  const params = useParams();
+  const eventId = params.eventId as string;
   const dateCfg = readDateConfig(allBlocks);
   const totalDays = dayCount(dateCfg.startDate, dateCfg.endDate);
   const dates = getEventDayDates(dateCfg.startDate, totalDays);
+  const [expanded, setExpanded] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
+
+  const foodBlockId = allBlocks.find((b) => b.type === "food")?.id ?? null;
 
   const itemsByCell = groupMenuItems(block.items);
   const nicknameByUserId = new Map<string, string>();
   for (const p of participants) nicknameByUserId.set(p.user.id, p.user.nickname);
+
+  function openAi() {
+    setExpanded(true);
+    setAiModalOpen(true);
+  }
 
   return (
     <Card>
@@ -1033,7 +1056,15 @@ function MenuEditor({
           <CardTitle>{block.title}</CardTitle>
           <Badge variant="accent">{t("block.menu", lang)}</Badge>
         </div>
-        <div className="flex gap-1 items-center">
+        <div className="flex gap-1 items-center flex-wrap justify-end">
+          <Button
+            size="sm"
+            onClick={openAi}
+            className="bg-blue-600 hover:bg-blue-700 text-white border border-blue-600"
+            disabled={block.items.length === 0}
+          >
+            {t("ai.createShoppingList", lang)}
+          </Button>
           {onMoveUp && (
             <button onClick={onMoveUp} className="px-1.5 py-1 text-text-secondary hover:text-text-primary transition-colors text-lg leading-none">↑</button>
           )}
@@ -1046,11 +1077,30 @@ function MenuEditor({
         </div>
       </div>
 
+      <AIShoppingListModal
+        open={aiModalOpen}
+        onClose={() => setAiModalOpen(false)}
+        eventId={eventId}
+        foodBlockId={foodBlockId}
+      />
+
       {totalDays === 0 ? (
         <p className="text-sm text-text-tertiary">{t("menu.noDates", lang)}</p>
       ) : (
-        <div className="space-y-4">
-          {dates.map((date, dayIndex) => {
+        <>
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-2 text-sm text-accent hover:underline mb-2"
+          >
+            <span>{expanded ? "▼" : "▶"}</span>
+            <span>
+              {expanded ? t("common.collapse", lang) : t("common.expand", lang)} (
+              {block.items.length} {t("common.itemsCount", lang)})
+            </span>
+          </button>
+          {expanded && (
+            <div className="space-y-4">
+              {dates.map((date, dayIndex) => {
             const meals = getAvailableMeals(
               dateCfg.startTime,
               dateCfg.endTime,
@@ -1081,9 +1131,324 @@ function MenuEditor({
               </div>
             );
           })}
-        </div>
+            </div>
+          )}
+        </>
       )}
     </Card>
+  );
+}
+
+interface AIShoppingItem {
+  name: string;
+  quantity: string;
+  notes?: string;
+}
+
+interface AIShoppingMeta {
+  numAttending: number;
+  menuItemsCount: number;
+  foodNormsAvailable: boolean;
+  pastCommentsConsidered: number;
+}
+
+function AIShoppingListModal({
+  open,
+  onClose,
+  eventId,
+  foodBlockId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  eventId: string;
+  foodBlockId: string | null;
+}) {
+  const { lang } = useLang();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<AIShoppingItem[]>([]);
+  const [rationale, setRationale] = useState<string>("");
+  const [meta, setMeta] = useState<AIShoppingMeta | null>(null);
+  const [extraInstructions, setExtraInstructions] = useState("");
+  const [savedNotice, setSavedNotice] = useState(false);
+
+  const generate = useCallback(
+    async (extra?: string) => {
+      setLoading(true);
+      setError(null);
+      setSavedNotice(false);
+      try {
+        const res = await fetch(`/api/events/${eventId}/ai-shopping-list`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ extraInstructions: extra ?? extraInstructions }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          setError(json?.error || t("ai.errorGeneric", lang));
+          setItems([]);
+          setRationale("");
+          setMeta(null);
+          return;
+        }
+        setItems(Array.isArray(json.items) ? json.items : []);
+        setRationale(typeof json.rationale === "string" ? json.rationale : "");
+        setMeta(json.meta ?? null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : t("ai.errorGeneric", lang));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [eventId, extraInstructions, lang]
+  );
+
+  useEffect(() => {
+    if (open && items.length === 0 && !loading && !error) {
+      generate();
+    }
+    if (!open) {
+      // reset on close
+      setItems([]);
+      setRationale("");
+      setError(null);
+      setMeta(null);
+      setSavedNotice(false);
+      setExtraInstructions("");
+    }
+  }, [open, items.length, loading, error, generate]);
+
+  function updateItem(idx: number, field: keyof AIShoppingItem, value: string) {
+    setItems((prev) =>
+      prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it))
+    );
+  }
+  function removeItem(idx: number) {
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+  }
+  function addRow() {
+    setItems((prev) => [...prev, { name: "", quantity: "", notes: "" }]);
+  }
+
+  async function approve() {
+    setSaving(true);
+    setError(null);
+    try {
+      let targetBlockId = foodBlockId;
+      if (!targetBlockId) {
+        const res = await fetch(`/api/events/${eventId}/blocks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "food",
+            title: t("blockTitle.food", lang),
+          }),
+        });
+        if (!res.ok) {
+          setError(t("ai.errorGeneric", lang));
+          setSaving(false);
+          return;
+        }
+        const created = await res.json();
+        targetBlockId = created.id;
+      }
+      const valid = items.filter((it) => it.name.trim() !== "");
+      for (const it of valid) {
+        await fetch(`/api/events/${eventId}/blocks/${targetBlockId}/items`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: it.name.trim(),
+            data: {
+              quantity: it.quantity || undefined,
+              notes: it.notes || undefined,
+            },
+          }),
+        });
+      }
+      setSavedNotice(true);
+      setTimeout(() => {
+        onClose();
+      }, 900);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("ai.errorGeneric", lang));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-surface-card rounded-[var(--radius-apple-lg)] shadow-[var(--shadow-apple-lg)]">
+        <div className="px-5 pt-5 pb-3 border-b border-border flex items-center justify-between sticky top-0 bg-surface-card z-10">
+          <h2 className="text-lg font-semibold text-text-primary">
+            {t("ai.modalTitle", lang)}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-text-tertiary hover:text-text-primary text-xl leading-none px-2"
+            aria-label="close"
+          >
+            ×
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          {meta && (
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Badge variant="accent">
+                {t("ai.metaAttending", lang)}: {meta.numAttending}
+              </Badge>
+              <Badge variant="default">
+                {t("ai.metaMenu", lang)}: {meta.menuItemsCount}
+              </Badge>
+              <Badge variant={meta.foodNormsAvailable ? "success" : "default"}>
+                {t("ai.metaNorms", lang)}:{" "}
+                {meta.foodNormsAvailable
+                  ? t("ai.metaNormsYes", lang)
+                  : t("ai.metaNormsNo", lang)}
+              </Badge>
+              <Badge variant={meta.pastCommentsConsidered > 0 ? "warning" : "default"}>
+                {t("ai.metaPastComments", lang)}: {meta.pastCommentsConsidered}
+              </Badge>
+            </div>
+          )}
+
+          {loading && (
+            <div className="py-8 text-center text-sm text-text-secondary">
+              <div className="inline-block w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin mr-2 align-middle" />
+              {t("ai.generating", lang)}
+            </div>
+          )}
+
+          {error && !loading && (
+            <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-[var(--radius-apple)]">
+              {error}
+            </p>
+          )}
+
+          {!loading && items.length === 0 && !error && (
+            <p className="text-sm text-text-tertiary">{t("ai.empty", lang)}</p>
+          )}
+
+          {!loading && items.length > 0 && (
+            <>
+              {rationale && (
+                <div className="p-3 rounded-[var(--radius-apple)] bg-surface border border-border">
+                  <p className="text-xs uppercase tracking-wide text-text-secondary mb-1">
+                    {t("ai.rationaleLabel", lang)}
+                  </p>
+                  <p className="text-sm text-text-primary whitespace-pre-wrap">
+                    {rationale}
+                  </p>
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs uppercase tracking-wide text-text-secondary border-b border-border">
+                      <th className="py-2 pr-2 w-2/5">{t("ai.colName", lang)}</th>
+                      <th className="py-2 pr-2 w-1/5">{t("ai.colQty", lang)}</th>
+                      <th className="py-2 pr-2 w-2/5">{t("ai.colNotes", lang)}</th>
+                      <th className="py-2 w-8"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((it, idx) => (
+                      <tr key={idx} className="border-b border-border last:border-0">
+                        <td className="py-1.5 pr-2">
+                          <input
+                            value={it.name}
+                            onChange={(e) => updateItem(idx, "name", e.target.value)}
+                            className="w-full px-2 py-1 bg-surface-card border border-border rounded-[6px] text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                          />
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <input
+                            value={it.quantity}
+                            onChange={(e) => updateItem(idx, "quantity", e.target.value)}
+                            className="w-full px-2 py-1 bg-surface-card border border-border rounded-[6px] text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                          />
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <input
+                            value={it.notes || ""}
+                            onChange={(e) => updateItem(idx, "notes", e.target.value)}
+                            className="w-full px-2 py-1 bg-surface-card border border-border rounded-[6px] text-xs text-text-secondary focus:outline-none focus:ring-2 focus:ring-accent/50"
+                          />
+                        </td>
+                        <td className="py-1.5 text-right">
+                          <button
+                            onClick={() => removeItem(idx)}
+                            className="text-text-tertiary hover:text-destructive px-1"
+                            title="×"
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <button
+                onClick={addRow}
+                className="text-sm text-accent hover:underline"
+              >
+                {t("ai.addRow", lang)}
+              </button>
+            </>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-xs text-text-secondary">
+              {t("ai.extraHintLabel", lang)}
+            </label>
+            <input
+              value={extraInstructions}
+              onChange={(e) => setExtraInstructions(e.target.value)}
+              placeholder={t("ai.extraHintPlaceholder", lang)}
+              className="w-full px-3 py-1.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+            />
+          </div>
+
+          {savedNotice && (
+            <p className="text-sm text-success bg-success/10 px-3 py-2 rounded-[var(--radius-apple)]">
+              {t("ai.savedToFood", lang)}
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+            <Button
+              onClick={approve}
+              disabled={loading || saving || items.length === 0}
+              className="bg-blue-600 hover:bg-blue-700 text-white border border-blue-600"
+            >
+              {saving ? t("ai.saving", lang) : t("ai.approve", lang)}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => generate(extraInstructions)}
+              disabled={loading || saving}
+            >
+              {t("ai.regenerate", lang)}
+            </Button>
+            <Button variant="ghost" onClick={onClose} disabled={saving}>
+              {t("ai.close", lang)}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

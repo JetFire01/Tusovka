@@ -10,6 +10,7 @@ export type BlockType =
   | "film"
   | "day_food"
   | "activities"
+  | "afterparty"
   | "custom";
 
 export interface BlockTypeConfig {
@@ -118,6 +119,15 @@ export const BLOCK_TYPES: Record<BlockType, BlockTypeConfig> = {
     label: "Мероприятия",
     icon: "calendar",
     defaultTitle: "События и мероприятия",
+    hasCostSplitting: false,
+    splitDefault: "none",
+    allowMultiple: false,
+  },
+  afterparty: {
+    key: "afterparty",
+    label: "Комментарии афтепати",
+    icon: "message-square",
+    defaultTitle: "Комментарии афтепати",
     hasCostSplitting: false,
     splitDefault: "none",
     allowMultiple: false,

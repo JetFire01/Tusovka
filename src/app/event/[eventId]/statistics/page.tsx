@@ -20,6 +20,7 @@ interface EventData {
   id: string;
   title: string;
   description: string | null;
+  eventTypeId: string | null;
   createdBy: string | null;
   participants: {
     id: string;
@@ -56,6 +57,11 @@ interface EventData {
   }[];
 }
 
+interface TemplateInfo {
+  id: string;
+  name: string;
+}
+
 export default function StatisticsPage() {
   const params = useParams();
   const eventId = params.eventId as string;
@@ -65,6 +71,25 @@ export default function StatisticsPage() {
   const [editingDesc, setEditingDesc] = useState(false);
   const [descText, setDescText] = useState("");
   const [expandedBlocks, setExpandedBlocks] = useState<Record<string, boolean>>({});
+  const [templates, setTemplates] = useState<TemplateInfo[]>([]);
+  const [editingType, setEditingType] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/event-templates")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setTemplates)
+      .catch(() => setTemplates([]));
+  }, []);
+
+  async function setEventType(eventTypeId: string) {
+    await fetch(`/api/events/${eventId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventTypeId: eventTypeId || null }),
+    });
+    setEditingType(false);
+    fetchEvent();
+  }
 
   async function moveBlock(blockId: string, direction: "up" | "down") {
     await fetch(`/api/events/${eventId}/blocks`, {
@@ -182,6 +207,40 @@ export default function StatisticsPage() {
             {t("event.addDescription", lang)}
           </button>
         )}
+
+        <div className="mt-3">
+          {editingType ? (
+            <div className="flex items-center gap-2">
+              <select
+                value={event.eventTypeId || ""}
+                onChange={(e) => setEventType(e.target.value)}
+                className="px-3 py-1.5 bg-surface-card border border-border rounded-[8px] text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/50"
+                autoFocus
+              >
+                <option value="">{t("templates.eventTypeNone", lang)}</option>
+                {templates.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name}
+                  </option>
+                ))}
+              </select>
+              <Button size="sm" variant="ghost" onClick={() => setEditingType(false)}>
+                {t("admin.cancel", lang)}
+              </Button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingType(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-[8px] bg-surface text-text-secondary hover:text-text-primary transition-colors border border-border"
+            >
+              <span>{t("templates.eventType", lang)}:</span>
+              <span className="text-text-primary">
+                {templates.find((tpl) => tpl.id === event.eventTypeId)?.name ||
+                  t("templates.eventTypeNone", lang)}
+              </span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Date & Place */}
@@ -496,7 +555,7 @@ export default function StatisticsPage() {
                       >
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">{item.name}</span>
+                            <span className="font-medium whitespace-pre-wrap">{item.name}</span>
                             {data.quantity && (
                               <span className="text-text-secondary">
                                 ({data.quantity})

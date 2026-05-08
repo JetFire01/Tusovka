@@ -27,6 +27,7 @@ model Event {
   startDate   String?
   endDate     String?
   numDays     Int      @default(1)
+  eventTypeId String?
   createdBy   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -34,6 +35,22 @@ model Event {
   blocks       Block[]
   participants Participant[]
   purchases    Purchase[]
+  eventType    EventTemplate? @relation(fields: [eventTypeId], references: [id], onDelete: SetNull)
+
+  @@index([eventTypeId])
+}
+
+model EventTemplate {
+  id              String   @id @default(cuid())
+  name            String
+  blockTypes      String   @default("[]")
+  foodNorms       String   @default("[]")
+  equipmentItems  String   @default("[]")
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  events Event[]
 }
 
 model Participant {

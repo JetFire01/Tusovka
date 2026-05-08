@@ -12,9 +12,48 @@ const translations = {
   // Tabs
   "tab.events": { ru: "Тусовки", en: "Events" },
   "tab.users": { ru: "Пользователи", en: "Users" },
+  "tab.settings": { ru: "Настройки", en: "Settings" },
   "tab.statistics": { ru: "Статистика", en: "Statistics" },
   "tab.admin": { ru: "Админка", en: "Admin" },
   "tab.survey": { ru: "Опросник", en: "Survey" },
+
+  // Event templates
+  "templates.addTemplate": { ru: "+ Добавить шаблон тусовки", en: "+ Add event template" },
+  "templates.empty": { ru: "Пока нет шаблонов", en: "No templates yet" },
+  "templates.newTitle": { ru: "Новый шаблон тусовки", en: "New event template" },
+  "templates.editTitle": { ru: "Изменить шаблон", en: "Edit template" },
+  "templates.name": { ru: "Название тусовки", en: "Event name" },
+  "templates.namePlaceholder": { ru: "Например: Шашлыки", en: "e.g. Barbecue" },
+  "templates.blocks": { ru: "Блоки, создаваемые автоматически", en: "Blocks to auto-create" },
+  "templates.blocksHint": { ru: "Выберите типы блоков, которые будут созданы при создании ивента из этого шаблона.", en: "Select block types to be created when an event uses this template." },
+  "templates.foodNorms": { ru: "Базовый расход продуктов на человека", en: "Base food consumption per person" },
+  "templates.addSubblock": { ru: "+ Добавить подблок", en: "+ Add subblock" },
+  "templates.subblockName": { ru: "Название подблока", en: "Subblock name" },
+  "templates.subblockNamePlaceholder": { ru: "Например: Шашлык", en: "e.g. Shashlik" },
+  "templates.product": { ru: "Продукт", en: "Product" },
+  "templates.productPlaceholder": { ru: "Мясо", en: "Meat" },
+  "templates.qty": { ru: "Кол-во", en: "Qty" },
+  "templates.unit": { ru: "Ед.", en: "Unit" },
+  "templates.unitPlaceholder": { ru: "г", en: "g" },
+  "templates.addProduct": { ru: "+ Добавить продукт", en: "+ Add product" },
+  "templates.removeProduct": { ru: "Убрать", en: "Remove" },
+  "templates.removeSubblock": { ru: "Удалить подблок", en: "Remove subblock" },
+  "templates.equipment": { ru: "Материалы и оснастка (необязательно)", en: "Supplies & equipment (optional)" },
+  "templates.equipmentName": { ru: "Название", en: "Name" },
+  "templates.equipmentNamePlaceholder": { ru: "Например: Котелок", en: "e.g. Pot" },
+  "templates.equipmentQty": { ru: "Количество", en: "Quantity" },
+  "templates.equipmentQtyPlaceholder": { ru: "1 шт", en: "1 pc" },
+  "templates.equipmentMode": { ru: "Режим", en: "Mode" },
+  "templates.equipmentModeBring": { ru: "Взять своё", en: "Bring own" },
+  "templates.equipmentModeBuy": { ru: "Купить", en: "Buy" },
+  "templates.addEquipment": { ru: "+ Добавить позицию оснастки", en: "+ Add equipment item" },
+  "templates.removeEquipment": { ru: "Убрать", en: "Remove" },
+  "templates.deleteConfirm": { ru: "Удалить этот шаблон?", en: "Delete this template?" },
+  "templates.edit": { ru: "Изменить", en: "Edit" },
+  "templates.delete": { ru: "Удалить", en: "Delete" },
+  "templates.eventType": { ru: "Тип тусовки", en: "Event type" },
+  "templates.eventTypeNone": { ru: "Без типа", en: "No type" },
+  "templates.eventTypeOptional": { ru: "Тип тусовки (необязательно)", en: "Event type (optional)" },
 
   // Auth
   "auth.login": { ru: "Вход", en: "Login" },
@@ -184,6 +223,7 @@ const translations = {
   "block.film": { ru: "Фотоплёнка", en: "Film" },
   "block.dayFood": { ru: "Паёк", en: "Day rations" },
   "block.activities": { ru: "Мероприятия", en: "Activities" },
+  "block.afterparty": { ru: "Комментарии афтепати", en: "Afterparty notes" },
   "block.custom": { ru: "Пользовательский", en: "Custom" },
 
   // Block default titles
@@ -198,7 +238,12 @@ const translations = {
   "blockTitle.film": { ru: "Фотоплёнка", en: "Film" },
   "blockTitle.day_food": { ru: "Паёк на день", en: "Daily Rations" },
   "blockTitle.activities": { ru: "События и мероприятия", en: "Events & Activities" },
+  "blockTitle.afterparty": { ru: "Комментарии афтепати", en: "Afterparty notes" },
   "blockTitle.custom": { ru: "Новый блок", en: "New Block" },
+
+  // Afterparty block
+  "afterparty.placeholder": { ru: "Что улучшить в следующий раз? Чего было много/мало?", en: "What to improve next time? Too much / too little of what?" },
+  "afterparty.empty": { ru: "Пока нет комментариев", en: "No comments yet" },
 
   // Menu block
   "menu.expand": { ru: "Развернуть меню", en: "Expand menu" },
@@ -250,6 +295,44 @@ const translations = {
   "food.saveWishBtn": { ru: "Добавить", en: "Add" },
   "food.cancelWishBtn": { ru: "Отмена", en: "Cancel" },
   "food.yourWish": { ru: "Ваше пожелание:", en: "Your wish:" },
+
+  // AI shopping list
+  "ai.createShoppingList": { ru: "Создать список покупок", en: "Create shopping list" },
+  "ai.generating": { ru: "ИИ думает…", en: "AI is thinking…" },
+  "ai.modalTitle": { ru: "Список покупок от ИИ", en: "AI shopping list" },
+  "ai.empty": { ru: "ИИ ничего не предложил.", en: "AI returned no items." },
+  "ai.rationaleLabel": { ru: "Пояснение от ИИ", en: "AI rationale" },
+  "ai.metaAttending": { ru: "Идут участников", en: "Attending" },
+  "ai.metaMenu": { ru: "Блюд в меню", en: "Menu items" },
+  "ai.metaNorms": { ru: "Нормы из шаблона", en: "Template norms" },
+  "ai.metaNormsYes": { ru: "учтены", en: "applied" },
+  "ai.metaNormsNo": { ru: "не заданы", en: "not set" },
+  "ai.metaPastComments": { ru: "Замечаний афтепати учтено", en: "Past comments used" },
+  "ai.colName": { ru: "Продукт", en: "Product" },
+  "ai.colQty": { ru: "Кол-во", en: "Qty" },
+  "ai.colNotes": { ru: "Для блюда", en: "For dish" },
+  "ai.addRow": { ru: "+ Добавить строку", en: "+ Add row" },
+  "ai.approve": { ru: "Одобрить и сохранить", en: "Approve & save" },
+  "ai.regenerate": { ru: "Перегенерировать", en: "Regenerate" },
+  "ai.close": { ru: "Закрыть", en: "Close" },
+  "ai.errorNoMenu": {
+    ru: "В блоке Меню нет блюд. Сначала добавьте хотя бы одно блюдо.",
+    en: "Menu block has no dishes. Add at least one first.",
+  },
+  "ai.errorGeneric": { ru: "Ошибка ИИ", en: "AI error" },
+  "ai.saving": { ru: "Сохраняю…", en: "Saving…" },
+  "ai.savedToFood": {
+    ru: "Список загружен в блок «Еда и продукты»",
+    en: "Saved to “Food & Groceries” block",
+  },
+  "ai.extraHintLabel": {
+    ru: "Дополнительные пожелания (необязательно)",
+    en: "Extra instructions (optional)",
+  },
+  "ai.extraHintPlaceholder": {
+    ru: "Например: меньше мяса, добавить сладкое",
+    en: "e.g.: less meat, add sweets",
+  },
 } as const;
 
 type TranslationKey = keyof typeof translations;

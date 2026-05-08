@@ -3,14 +3,61 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
-import { useLang, t } from "@/lib/i18n";
+import { useLang, t, Lang } from "@/lib/i18n";
 import { useTheme } from "@/components/ThemeProvider";
 import { Card, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
-import { BLOCK_TYPES } from "@/lib/blocks";
+import { BLOCK_TYPES, BlockType } from "@/lib/blocks";
+
+interface TemplateData {
+  id: string;
+  name: string;
+  blockTypes: string;
+  foodNorms: string;
+  equipmentItems: string;
+  createdBy: string;
+}
+
+interface FoodNormProduct {
+  product: string;
+  quantity: string;
+  unit: string;
+}
+
+interface FoodNormSubblock {
+  name: string;
+  items: FoodNormProduct[];
+}
+
+interface EquipmentItemTemplate {
+  name: string;
+  quantity: string;
+  itemMode: "bring" | "buy";
+}
+
+const TEMPLATE_BLOCK_LABEL_KEYS: Record<BlockType, string> = {
+  date_place: "block.datePlace",
+  food: "block.food",
+  menu: "block.menu",
+  alcohol: "block.alcohol",
+  tent: "block.tent",
+  equipment: "block.equipment",
+  transport: "block.transport",
+  pyrotechnics: "block.pyrotechnics",
+  film: "block.film",
+  day_food: "block.dayFood",
+  activities: "block.activities",
+  afterparty: "block.afterparty",
+  custom: "block.custom",
+};
+
+function blockTypeLabel(type: BlockType, lang: Lang) {
+  const key = TEMPLATE_BLOCK_LABEL_KEYS[type];
+  return key ? t(key as Parameters<typeof t>[0], lang) : type;
+}
 
 interface EventData {
   id: string;
@@ -33,7 +80,7 @@ export default function HomePage() {
   const { lang, setLang } = useLang();
   const { theme, setTheme } = useTheme();
   const router = useRouter();
-  const [tab, setTab] = useState<"events" | "users">("events");
+  const [tab, setTab] = useState<"events" | "users" | "settings">("events");
   const [events, setEvents] = useState<EventData[]>([]);
   const [users, setUsers] = useState<UserData[]>([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -177,6 +224,16 @@ export default function HomePage() {
             >
               {t("tab.users", lang)}
             </button>
+            <button
+              onClick={() => setTab("settings")}
+              className={`px-4 py-1.5 text-sm font-medium rounded-[10px] transition-all ${
+                tab === "settings"
+                  ? "bg-surface-card text-text-primary shadow-sm"
+                  : "text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              {t("tab.settings", lang)}
+            </button>
           </nav>
         </div>
       </header>
@@ -235,6 +292,19 @@ export default function HomePage() {
 
         {tab === "users" && (
           <UsersTab users={users} onUpdate={fetchUsers} />
+        )}
+
+        {tab === "settings" && (
+          <SettingsTab
+            requireAuth={() => {
+              if (!user) {
+                setPendingAction("create");
+                setShowAuth(true);
+                return false;
+              }
+              return true;
+            }}
+          />
         )}
       </main>
 
@@ -570,7 +640,17 @@ function CreateEventModal({
   const { lang } = useLang();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [eventTypeId, setEventTypeId] = useState("");
+  const [templates, setTemplates] = useState<TemplateData[]>([]);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/event-templates")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setTemplates)
+      .catch(() => setTemplates([]));
+  }, [open]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -585,12 +665,14 @@ function CreateEventModal({
       body: JSON.stringify({
         title: title.trim(),
         description: description.trim() || undefined,
+        eventTypeId: eventTypeId || undefined,
       }),
     });
     if (res.ok) {
       const event = await res.json();
       setTitle("");
       setDescription("");
+      setEventTypeId("");
       onCreated(event.id);
     } else {
       setError(t("event.createError", lang));
@@ -619,9 +701,511 @@ function CreateEventModal({
             className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary placeholder:text-text-tertiary transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent resize-none"
           />
         </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-text-primary">
+            {t("templates.eventTypeOptional", lang)}
+          </label>
+          <select
+            value={eventTypeId}
+            onChange={(e) => setEventTypeId(e.target.value)}
+            className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
+          >
+            <option value="">{t("templates.eventTypeNone", lang)}</option>
+            {templates.map((tpl) => (
+              <option key={tpl.id} value={tpl.id}>
+                {tpl.name}
+              </option>
+            ))}
+          </select>
+        </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button type="submit">{t("event.create", lang)}</Button>
       </form>
     </Modal>
+  );
+}
+
+const ALL_BLOCK_TYPES: BlockType[] = [
+  "date_place",
+  "food",
+  "menu",
+  "alcohol",
+  "tent",
+  "equipment",
+  "transport",
+  "pyrotechnics",
+  "film",
+  "day_food",
+  "activities",
+  "afterparty",
+  "custom",
+];
+
+function SettingsTab({ requireAuth }: { requireAuth: () => boolean }) {
+  const { lang } = useLang();
+  const [templates, setTemplates] = useState<TemplateData[]>([]);
+  const [editing, setEditing] = useState<TemplateData | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const fetchTemplates = useCallback(async () => {
+    const res = await fetch("/api/event-templates");
+    if (res.ok) setTemplates(await res.json());
+  }, []);
+
+  useEffect(() => {
+    fetchTemplates();
+  }, [fetchTemplates]);
+
+  async function handleDelete(id: string) {
+    if (!requireAuth()) return;
+    if (!confirm(t("templates.deleteConfirm", lang))) return;
+    await fetch(`/api/event-templates/${id}`, { method: "DELETE" });
+    fetchTemplates();
+  }
+
+  return (
+    <div className="space-y-4">
+      <button
+        onClick={() => {
+          if (!requireAuth()) return;
+          setCreating(true);
+        }}
+        className="text-accent hover:underline text-sm font-medium"
+      >
+        {t("templates.addTemplate", lang)}
+      </button>
+
+      {templates.length === 0 ? (
+        <p className="text-sm text-text-secondary">{t("templates.empty", lang)}</p>
+      ) : (
+        <div className="space-y-2">
+          {templates.map((tpl) => {
+            let blockTypes: string[] = [];
+            try {
+              blockTypes = JSON.parse(tpl.blockTypes);
+            } catch {}
+            return (
+              <Card key={tpl.id} className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <CardTitle>{tpl.name}</CardTitle>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {blockTypes.map((bt) => (
+                      <Badge key={bt} variant="default">
+                        {blockTypeLabel(bt as BlockType, lang)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button
+                    className="text-xs text-accent hover:underline px-2 py-1"
+                    onClick={() => {
+                      if (!requireAuth()) return;
+                      setEditing(tpl);
+                    }}
+                  >
+                    {t("templates.edit", lang)}
+                  </button>
+                  <button
+                    className="text-xs text-destructive hover:underline px-2 py-1"
+                    onClick={() => handleDelete(tpl.id)}
+                  >
+                    {t("templates.delete", lang)}
+                  </button>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      <TemplateEditorModal
+        open={creating || editing !== null}
+        template={editing}
+        onClose={() => {
+          setCreating(false);
+          setEditing(null);
+        }}
+        onSaved={() => {
+          setCreating(false);
+          setEditing(null);
+          fetchTemplates();
+        }}
+      />
+    </div>
+  );
+}
+
+function TemplateEditorModal({
+  open,
+  template,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  template: TemplateData | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { lang } = useLang();
+  const [name, setName] = useState("");
+  const [blockTypes, setBlockTypes] = useState<BlockType[]>([]);
+  const [foodNorms, setFoodNorms] = useState<FoodNormSubblock[]>([]);
+  const [equipmentItems, setEquipmentItems] = useState<EquipmentItemTemplate[]>([]);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    if (template) {
+      setName(template.name);
+      try {
+        setBlockTypes(JSON.parse(template.blockTypes));
+      } catch {
+        setBlockTypes([]);
+      }
+      try {
+        setFoodNorms(JSON.parse(template.foodNorms));
+      } catch {
+        setFoodNorms([]);
+      }
+      try {
+        setEquipmentItems(JSON.parse(template.equipmentItems));
+      } catch {
+        setEquipmentItems([]);
+      }
+    } else {
+      setName("");
+      setBlockTypes([]);
+      setFoodNorms([]);
+      setEquipmentItems([]);
+    }
+    setError("");
+  }, [open, template]);
+
+  function toggleBlockType(type: BlockType) {
+    setBlockTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  }
+
+  function addSubblock() {
+    setFoodNorms((prev) => [...prev, { name: "", items: [] }]);
+  }
+  function removeSubblock(idx: number) {
+    setFoodNorms((prev) => prev.filter((_, i) => i !== idx));
+  }
+  function updateSubblockName(idx: number, value: string) {
+    setFoodNorms((prev) =>
+      prev.map((sb, i) => (i === idx ? { ...sb, name: value } : sb))
+    );
+  }
+  function addProduct(idx: number) {
+    setFoodNorms((prev) =>
+      prev.map((sb, i) =>
+        i === idx
+          ? { ...sb, items: [...sb.items, { product: "", quantity: "", unit: "" }] }
+          : sb
+      )
+    );
+  }
+  function updateProduct(
+    sbIdx: number,
+    pIdx: number,
+    field: keyof FoodNormProduct,
+    value: string
+  ) {
+    setFoodNorms((prev) =>
+      prev.map((sb, i) =>
+        i === sbIdx
+          ? {
+              ...sb,
+              items: sb.items.map((p, j) =>
+                j === pIdx ? { ...p, [field]: value } : p
+              ),
+            }
+          : sb
+      )
+    );
+  }
+  function removeProduct(sbIdx: number, pIdx: number) {
+    setFoodNorms((prev) =>
+      prev.map((sb, i) =>
+        i === sbIdx
+          ? { ...sb, items: sb.items.filter((_, j) => j !== pIdx) }
+          : sb
+      )
+    );
+  }
+
+  function addEquipment() {
+    setEquipmentItems((prev) => [...prev, { name: "", quantity: "", itemMode: "bring" }]);
+  }
+  function updateEquipment(
+    idx: number,
+    field: keyof EquipmentItemTemplate,
+    value: string
+  ) {
+    setEquipmentItems((prev) =>
+      prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it))
+    );
+  }
+  function removeEquipment(idx: number) {
+    setEquipmentItems((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (name.trim().length < 2) {
+      setError(t("auth.min2chars", lang));
+      return;
+    }
+
+    const cleanedFoodNorms = foodNorms
+      .map((sb) => ({
+        name: sb.name.trim(),
+        items: sb.items
+          .filter((p) => p.product.trim() !== "")
+          .map((p) => ({
+            product: p.product.trim(),
+            quantity: p.quantity.trim(),
+            unit: p.unit.trim(),
+          })),
+      }))
+      .filter((sb) => sb.name !== "" || sb.items.length > 0);
+
+    const cleanedEquipment = equipmentItems
+      .filter((it) => it.name.trim() !== "")
+      .map((it) => ({
+        name: it.name.trim(),
+        quantity: it.quantity.trim(),
+        itemMode: it.itemMode,
+      }));
+
+    setSaving(true);
+    const payload = {
+      name: name.trim(),
+      blockTypes,
+      foodNorms: cleanedFoodNorms,
+      equipmentItems: cleanedEquipment,
+    };
+    const res = template
+      ? await fetch(`/api/event-templates/${template.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      : await fetch("/api/event-templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+    setSaving(false);
+    if (res.ok) {
+      onSaved();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || "Error");
+    }
+  }
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-lg bg-surface-card rounded-[var(--radius-apple-lg)] shadow-[var(--shadow-apple-lg)] my-4">
+        <div className="px-5 pt-5 pb-0">
+          <h2 className="text-lg font-semibold text-text-primary">
+            {template ? t("templates.editTitle", lang) : t("templates.newTitle", lang)}
+          </h2>
+        </div>
+        <form onSubmit={handleSave} className="p-5 flex flex-col gap-5">
+          <Input
+            label={t("templates.name", lang)}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder={t("templates.namePlaceholder", lang)}
+            autoFocus
+          />
+
+          <div className="flex flex-col gap-2">
+            <label className="text-sm font-medium text-text-primary">
+              {t("templates.blocks", lang)}
+            </label>
+            <p className="text-xs text-text-secondary">
+              {t("templates.blocksHint", lang)}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {ALL_BLOCK_TYPES.map((bt) => {
+                const active = blockTypes.includes(bt);
+                return (
+                  <button
+                    type="button"
+                    key={bt}
+                    onClick={() => toggleBlockType(bt)}
+                    className={`px-3 py-1.5 text-xs rounded-[8px] border transition-colors ${
+                      active
+                        ? "bg-accent text-white border-accent"
+                        : "bg-surface text-text-secondary border-border hover:text-text-primary"
+                    }`}
+                  >
+                    {blockTypeLabel(bt, lang)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <label className="text-sm font-medium text-text-primary">
+              {t("templates.foodNorms", lang)}
+            </label>
+            {foodNorms.map((sb, sbIdx) => (
+              <div
+                key={sbIdx}
+                className="border border-border rounded-[var(--radius-apple)] p-3 bg-surface space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    value={sb.name}
+                    onChange={(e) => updateSubblockName(sbIdx, e.target.value)}
+                    placeholder={t("templates.subblockNamePlaceholder", lang)}
+                    className="flex-1 px-3 py-1.5 bg-surface-card border border-border rounded-[8px] text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeSubblock(sbIdx)}
+                    className="text-xs text-destructive hover:underline px-2"
+                  >
+                    {t("templates.removeSubblock", lang)}
+                  </button>
+                </div>
+
+                {sb.items.length > 0 && (
+                  <div className="space-y-1">
+                    {sb.items.map((p, pIdx) => (
+                      <div key={pIdx} className="flex items-center gap-1">
+                        <input
+                          value={p.product}
+                          onChange={(e) =>
+                            updateProduct(sbIdx, pIdx, "product", e.target.value)
+                          }
+                          placeholder={t("templates.productPlaceholder", lang)}
+                          className="flex-1 min-w-0 px-2 py-1 bg-surface-card border border-border rounded-[6px] text-xs"
+                        />
+                        <input
+                          value={p.quantity}
+                          onChange={(e) =>
+                            updateProduct(sbIdx, pIdx, "quantity", e.target.value)
+                          }
+                          placeholder={t("templates.qty", lang)}
+                          inputMode="decimal"
+                          className="w-16 px-2 py-1 bg-surface-card border border-border rounded-[6px] text-xs"
+                        />
+                        <input
+                          value={p.unit}
+                          onChange={(e) =>
+                            updateProduct(sbIdx, pIdx, "unit", e.target.value)
+                          }
+                          placeholder={t("templates.unitPlaceholder", lang)}
+                          className="w-14 px-2 py-1 bg-surface-card border border-border rounded-[6px] text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeProduct(sbIdx, pIdx)}
+                          className="text-xs text-text-tertiary hover:text-destructive px-1"
+                          title={t("templates.removeProduct", lang)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => addProduct(sbIdx)}
+                  className="text-xs text-accent hover:underline"
+                >
+                  {t("templates.addProduct", lang)}
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addSubblock}
+              className="text-sm text-accent hover:underline self-start"
+            >
+              {t("templates.addSubblock", lang)}
+            </button>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <label className="text-sm font-medium text-text-primary">
+              {t("templates.equipment", lang)}
+            </label>
+            {equipmentItems.map((it, idx) => (
+              <div key={idx} className="flex items-center gap-1">
+                <input
+                  value={it.name}
+                  onChange={(e) => updateEquipment(idx, "name", e.target.value)}
+                  placeholder={t("templates.equipmentNamePlaceholder", lang)}
+                  className="flex-1 min-w-0 px-2 py-1 bg-surface-card border border-border rounded-[6px] text-xs"
+                />
+                <input
+                  value={it.quantity}
+                  onChange={(e) => updateEquipment(idx, "quantity", e.target.value)}
+                  placeholder={t("templates.equipmentQtyPlaceholder", lang)}
+                  className="w-20 px-2 py-1 bg-surface-card border border-border rounded-[6px] text-xs"
+                />
+                <select
+                  value={it.itemMode}
+                  onChange={(e) =>
+                    updateEquipment(idx, "itemMode", e.target.value as "bring" | "buy")
+                  }
+                  className="px-2 py-1 bg-surface-card border border-border rounded-[6px] text-xs"
+                >
+                  <option value="bring">{t("templates.equipmentModeBring", lang)}</option>
+                  <option value="buy">{t("templates.equipmentModeBuy", lang)}</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => removeEquipment(idx)}
+                  className="text-xs text-text-tertiary hover:text-destructive px-1"
+                  title={t("templates.removeEquipment", lang)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addEquipment}
+              className="text-sm text-accent hover:underline self-start"
+            >
+              {t("templates.addEquipment", lang)}
+            </button>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <div className="flex gap-2 pt-2">
+            <Button type="submit" disabled={saving}>
+              {t("admin.save", lang)}
+            </Button>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              {t("admin.cancel", lang)}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

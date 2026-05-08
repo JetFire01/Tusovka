@@ -66,6 +66,9 @@ export async function PATCH(
       ...(body.startDate !== undefined && { startDate: body.startDate }),
       ...(body.endDate !== undefined && { endDate: body.endDate }),
       ...(body.numDays !== undefined && { numDays: body.numDays }),
+      ...(body.eventTypeId !== undefined && {
+        eventTypeId: body.eventTypeId || null,
+      }),
     },
   });
 
