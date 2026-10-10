@@ -7,6 +7,7 @@ import { Card, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import {
+  buyerLabel,
   formatDateRu,
   getAvailableMeals,
   getEventDayDates,
@@ -574,15 +575,16 @@ export default function StatisticsPage() {
                           {data.cost !== undefined && data.cost !== "" && (
                             <p className="text-xs text-text-secondary">
                               {t("common.priceLabel", lang)} – {data.cost}
-                              {data.buyerName && ` (${data.buyerName})`}
+                              {buyerLabel(event.participants, data.buyerUserId, data.buyerName) &&
+                                ` (${buyerLabel(event.participants, data.buyerUserId, data.buyerName)})`}
                             </p>
                           )}
                           {data.fuelCost !== undefined &&
                             data.fuelCost !== "" && (
                               <p className="text-xs text-text-secondary">
                                 {t("common.fuelLabel", lang)} – {data.fuelCost}
-                                {data.fuelBuyerName &&
-                                  ` (${data.fuelBuyerName})`}
+                                {buyerLabel(event.participants, data.fuelBuyerUserId, data.fuelBuyerName) &&
+                                  ` (${buyerLabel(event.participants, data.fuelBuyerUserId, data.fuelBuyerName)})`}
                               </p>
                             )}
                           {data.departureDate && (

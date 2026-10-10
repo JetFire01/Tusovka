@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { generatePin, hashPin, createToken } from "@/lib/auth";
+import {
+  generatePin,
+  hashPin,
+  createToken,
+  AUTH_COOKIE,
+  authCookieOptions,
+} from "@/lib/auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,6 +16,12 @@ export async function POST(request: NextRequest) {
     if (!nickname || typeof nickname !== "string" || nickname.trim().length < 2) {
       return NextResponse.json(
         { error: "Никнейм должен содержать минимум 2 символа" },
+        { status: 400 }
+      );
+    }
+    if (nickname.trim().length > 50) {
+      return NextResponse.json(
+        { error: "Никнейм слишком длинный (максимум 50 символов)" },
         { status: 400 }
       );
     }
@@ -51,12 +63,7 @@ export async function POST(request: NextRequest) {
       displayName: `${user.nickname}#${pin}`,
     });
 
-    response.cookies.set("auth-token", token, {
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 30,
-      path: "/",
-    });
+    response.cookies.set(AUTH_COOKIE, token, authCookieOptions);
 
     return response;
   } catch (err) {

@@ -144,7 +144,11 @@ export default function HomePage() {
       setDeleteError(t("auth.wrongPin", lang));
       return;
     }
-    await fetch(`/api/events/${deleteEventId}`, { method: "DELETE" });
+    const delRes = await fetch(`/api/events/${deleteEventId}`, { method: "DELETE" });
+    if (!delRes.ok) {
+      setDeleteError(t("event.deleteForbidden", lang));
+      return;
+    }
     setDeleteEventId(null);
     setDeletePin("");
     fetchEvents();
@@ -192,7 +196,8 @@ export default function HomePage() {
             </button>
             {user && (
               <span className="text-sm text-text-secondary">
-                {user.nickname}#{user.pin}
+                {user.nickname}
+                {user.pin ? `#${user.pin}` : ""}
               </span>
             )}
             {tab === "events" && (
@@ -368,7 +373,7 @@ function UsersTab({
   onUpdate: () => void;
 }) {
   const { lang } = useLang();
-  const { user: currentUser, login } = useAuth();
+  const { user: currentUser, login, refresh } = useAuth();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState<"nickname" | "pin">("nickname");
   const [editValue, setEditValue] = useState("");
@@ -387,9 +392,9 @@ function UsersTab({
     });
     if (res.ok) {
       setEditingId(null);
-      // Re-login to refresh auth state if current user changed nickname
+      // Refresh auth state if current user changed nickname
       if (currentUser && currentUser.userId === userId) {
-        await login(currentUser.pin);
+        await refresh();
       }
       onUpdate();
     }
@@ -476,6 +481,7 @@ function UsersTab({
                     {new Date(u.createdAt).toLocaleDateString(lang === "ru" ? "ru-RU" : "en-US")}
                   </span>
                 </div>
+                {currentUser?.userId === u.id && (
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
                     className="text-xs text-accent hover:underline px-2 py-1"
@@ -506,6 +512,7 @@ function UsersTab({
                     {t("users.deleteUser", lang)}
                   </button>
                 </div>
+                )}
               </>
             )}
           </div>
@@ -549,7 +556,7 @@ function AuthModal({
       return;
     }
     const result = await register(nickname.trim());
-    if (result.user) setNewUser({ nickname: result.user.nickname, pin: result.user.pin });
+    if (result.user) setNewUser({ nickname: result.user.nickname, pin: result.user.pin ?? "" });
     else setError(result.error || t("auth.registerError", lang));
   }
 

@@ -15,12 +15,18 @@ export interface ParticipantFinance {
 export interface FinanceResult {
   participants: ParticipantFinance[];
   totalSpent: number;
+  // Зачисленные покупателям, но никому не начисленные деньги
+  // (алкоголь без пьющих, опт-ин без claims, машина без пассажиров).
+  // Отрицательное значение — обратная утечка: начислено, но покупатель не найден.
+  unallocated: number;
 }
 
 interface BlockItemData {
   cost?: number;
+  buyerUserId?: string;
   buyerName?: string;
   fuelCost?: number;
+  fuelBuyerUserId?: string;
   fuelBuyerName?: string;
   itemMode?: string;
   transportType?: string;
@@ -71,6 +77,23 @@ function daysBetween(start: string, end: string): number {
   return Math.floor(diff / (1000 * 60 * 60 * 24));
 }
 
+// Поиск участника-покупателя: по userId (надёжно при переименовании),
+// для старых данных без userId — по нику. Если userId задан, но участник
+// не найден, по нику не ищем, чтобы не приписать расход тёзке.
+function findBuyer(
+  attendees: ParticipantInfo[],
+  userId?: string,
+  nickname?: string
+): ParticipantInfo | undefined {
+  if (userId) {
+    return attendees.find((a) => a.user.id === userId);
+  }
+  if (nickname) {
+    return attendees.find((a) => a.user.nickname === nickname);
+  }
+  return undefined;
+}
+
 function parseData(dataStr: string): BlockItemData {
   try {
     return JSON.parse(dataStr);
@@ -82,7 +105,7 @@ function parseData(dataStr: string): BlockItemData {
 export function calculateFinances(event: EventInfo): FinanceResult {
   const attendees = event.participants.filter((p) => p.attending === "yes");
   if (attendees.length === 0) {
-    return { participants: [], totalSpent: 0 };
+    return { participants: [], totalSpent: 0, unallocated: 0 };
   }
 
   // Init finance map
@@ -133,10 +156,12 @@ export function calculateFinances(event: EventInfo): FinanceResult {
     dayCoeffs.set(a.user.id, coeff);
   }
 
-  // 2. Calculate food total
+  // 2. Calculate food total. Custom-блоки (splitDefault: "all") делятся
+  // так же, как еда, — иначе их стоимость зачисляется покупателю (шаг 8),
+  // но никому не начисляется.
   let foodTotal = 0;
   const foodBlocks = event.blocks.filter(
-    (b) => b.type === "food" || b.type === "day_food"
+    (b) => b.type === "food" || b.type === "day_food" || b.type === "custom"
   );
   for (const block of foodBlocks) {
     for (const item of block.items) {
@@ -270,11 +295,12 @@ export function calculateFinances(event: EventInfo): FinanceResult {
         }
       }
       // Driver (car name might be owner — we need to find who added it)
-      // Driver is identified by buyerName or the item name
-      if (car.data.driverPays && car.data.fuelBuyerName) {
-        // Find driver by nickname
-        const driver = attendees.find(
-          (a) => a.user.nickname === car.data.fuelBuyerName
+      // Driver is identified by fuelBuyerUserId (legacy: fuelBuyerName)
+      if (car.data.driverPays) {
+        const driver = findBuyer(
+          attendees,
+          car.data.fuelBuyerUserId,
+          car.data.fuelBuyerName
         );
         if (driver) sharedPassengerIds.add(driver.user.id);
       }
@@ -301,9 +327,11 @@ export function calculateFinances(event: EventInfo): FinanceResult {
     }
 
     // Add driver if driverPays
-    if (car.data.driverPays && car.data.fuelBuyerName) {
-      const driver = attendees.find(
-        (a) => a.user.nickname === car.data.fuelBuyerName
+    if (car.data.driverPays) {
+      const driver = findBuyer(
+        attendees,
+        car.data.fuelBuyerUserId,
+        car.data.fuelBuyerName
       );
       if (driver) passengerIds.add(driver.user.id);
     }
@@ -323,21 +351,17 @@ export function calculateFinances(event: EventInfo): FinanceResult {
     for (const item of block.items) {
       const d = parseData(item.data);
 
-      // buyerName → purchases
-      if (d.buyerName && d.cost && typeof d.cost === "number") {
-        const buyer = attendees.find(
-          (a) => a.user.nickname === d.buyerName
-        );
+      // buyerUserId / buyerName → purchases
+      if (d.cost && typeof d.cost === "number") {
+        const buyer = findBuyer(attendees, d.buyerUserId, d.buyerName);
         if (buyer) {
           finMap.get(buyer.user.id)!.purchases += d.cost;
         }
       }
 
-      // fuelBuyerName → purchases
-      if (d.fuelBuyerName && d.fuelCost && typeof d.fuelCost === "number") {
-        const buyer = attendees.find(
-          (a) => a.user.nickname === d.fuelBuyerName
-        );
+      // fuelBuyerUserId / fuelBuyerName → purchases
+      if (d.fuelCost && typeof d.fuelCost === "number") {
+        const buyer = findBuyer(attendees, d.fuelBuyerUserId, d.fuelBuyerName);
         if (buyer) {
           finMap.get(buyer.user.id)!.purchases += d.fuelCost;
         }
@@ -377,5 +401,16 @@ export function calculateFinances(event: EventInfo): FinanceResult {
     }
   }
 
-  return { participants, totalSpent };
+  // 11. Сверка баланса: сумма плюсов должна равняться сумме модулей минусов.
+  // Расхождение — деньги, зачисленные покупателям, но никому не начисленные
+  // (или наоборот); UI показывает предупреждение, если |unallocated| > 0.
+  const sumPositive = participants
+    .filter((p) => p.total > 0)
+    .reduce((s, p) => s + p.total, 0);
+  const sumNegative = participants
+    .filter((p) => p.total < 0)
+    .reduce((s, p) => s + Math.abs(p.total), 0);
+  const unallocated = Math.round((sumPositive - sumNegative) * 100) / 100;
+
+  return { participants, totalSpent, unallocated };
 }

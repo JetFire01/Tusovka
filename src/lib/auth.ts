@@ -1,9 +1,25 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "tusovka-secret-key-change-in-production"
-);
+// Проверяем секрет лениво (а не при импорте), чтобы не ронять `next build`,
+// где переменные окружения рантайма ещё не заданы.
+function getSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === "production") {
+    throw new Error("JWT_SECRET must be set in production");
+  }
+  return new TextEncoder().encode(secret || "tusovka-dev-only-secret");
+}
+
+export const AUTH_COOKIE = "auth-token";
+
+export const authCookieOptions = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+  maxAge: 60 * 60 * 24 * 30,
+  path: "/",
+};
 
 export function generatePin(): string {
   return Math.floor(1000 + Math.random() * 9000).toString();
@@ -22,14 +38,14 @@ export async function createToken(userId: string): Promise<string> {
   return new SignJWT({ userId })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("30d")
-    .sign(JWT_SECRET);
+    .sign(getSecret());
 }
 
 export async function verifyToken(
   token: string
 ): Promise<{ userId: string } | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getSecret());
     return { userId: payload.userId as string };
   } catch {
     return null;
@@ -38,7 +54,7 @@ export async function verifyToken(
 
 export async function getCurrentUser(): Promise<{ userId: string } | null> {
   const cookieStore = await cookies();
-  const token = cookieStore.get("auth-token")?.value;
+  const token = cookieStore.get(AUTH_COOKIE)?.value;
   if (!token) return null;
   return verifyToken(token);
 }

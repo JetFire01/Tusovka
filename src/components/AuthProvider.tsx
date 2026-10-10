@@ -3,32 +3,36 @@
 import { useState, useEffect, useCallback, ReactNode } from "react";
 import { AuthContext, AuthUser } from "@/hooks/useAuth";
 
-const STORAGE_KEY = "tusovka-auth";
+// Раньше PIN хранился в localStorage — чистим за старыми версиями.
+const LEGACY_STORAGE_KEY = "tusovka-auth";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as AuthUser;
-        login(parsed.pin).then((ok) => {
-          if (!ok) {
-            localStorage.removeItem(STORAGE_KEY);
-          }
-          setIsLoading(false);
-        });
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
-        setIsLoading(false);
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.user) {
+        setUser((prev) => ({
+          userId: data.user.userId,
+          nickname: data.user.nickname,
+          pin: prev && prev.userId === data.user.userId ? prev.pin : undefined,
+        }));
+      } else {
+        setUser(null);
       }
-    } else {
-      setIsLoading(false);
+    } catch {
+      // сеть недоступна — оставляем текущее состояние
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    refresh().finally(() => setIsLoading(false));
+  }, [refresh]);
 
   const login = useCallback(async (pin: string): Promise<boolean> => {
     const res = await fetch("/api/auth/login", {
@@ -46,7 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       pin,
     };
     setUser(authUser);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
     return true;
   }, []);
 
@@ -68,18 +71,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       pin: data.pin,
     };
     setUser(authUser);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(authUser));
     return { user: authUser };
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
-    document.cookie = "auth-token=; path=/; max-age=0";
+    fetch("/api/auth/logout", { method: "POST" });
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, refresh, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

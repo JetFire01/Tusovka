@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { hashPin } from "@/lib/auth";
+import { getCurrentUser, hashPin } from "@/lib/auth";
 
 export async function GET() {
   const users = await prisma.user.findMany({
@@ -16,17 +16,28 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const current = await getCurrentUser();
+  if (!current) {
+    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  }
+
   const body = await request.json();
   const { userId, nickname, newPin } = body;
 
   if (!userId) {
     return NextResponse.json({ error: "userId обязателен" }, { status: 400 });
   }
+  if (userId !== current.userId) {
+    return NextResponse.json(
+      { error: "Можно изменять только свою учётную запись" },
+      { status: 403 }
+    );
+  }
 
   const updateData: Record<string, string> = {};
 
   if (nickname !== undefined) {
-    if (nickname.trim().length < 2) {
+    if (typeof nickname !== "string" || nickname.trim().length < 2) {
       return NextResponse.json(
         { error: "Никнейм должен содержать минимум 2 символа" },
         { status: 400 }
@@ -36,13 +47,23 @@ export async function PATCH(request: NextRequest) {
   }
 
   if (newPin !== undefined) {
-    if (!/^\d{4}$/.test(newPin)) {
+    if (typeof newPin !== "string" || !/^\d{4}$/.test(newPin)) {
       return NextResponse.json(
         { error: "PIN должен содержать 4 цифры" },
         { status: 400 }
       );
     }
-    updateData.pinHash = await hashPin(newPin);
+    const pinHash = await hashPin(newPin);
+    const existing = await prisma.user.findFirst({
+      where: { pinHash, id: { not: userId } },
+    });
+    if (existing) {
+      return NextResponse.json(
+        { error: "Этот PIN уже занят, выберите другой" },
+        { status: 409 }
+      );
+    }
+    updateData.pinHash = pinHash;
   }
 
   const user = await prisma.user.update({
@@ -54,18 +75,37 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const current = await getCurrentUser();
+  if (!current) {
+    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
 
   if (!userId) {
     return NextResponse.json({ error: "userId обязателен" }, { status: 400 });
   }
+  if (userId !== current.userId) {
+    return NextResponse.json(
+      { error: "Можно удалить только свою учётную запись" },
+      { status: 403 }
+    );
+  }
 
-  // Delete all related data first
-  await prisma.claim.deleteMany({ where: { userId } });
-  await prisma.participant.deleteMany({ where: { userId } });
-  await prisma.purchase.deleteMany({ where: { buyerId: userId } });
-  await prisma.user.delete({ where: { id: userId } });
+  await prisma.$transaction([
+    prisma.claim.deleteMany({ where: { userId } }),
+    prisma.participant.deleteMany({ where: { userId } }),
+    prisma.purchase.deleteMany({ where: { buyerId: userId } }),
+    prisma.user.delete({ where: { id: userId } }),
+  ]);
 
-  return NextResponse.json({ ok: true });
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set("auth-token", "", {
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 0,
+    path: "/",
+  });
+  return response;
 }

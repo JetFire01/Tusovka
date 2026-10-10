@@ -48,20 +48,41 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ eventId: string; blockId: string }> }
 ) {
-  const { blockId } = await params;
+  const { eventId, blockId } = await params;
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  }
+
+  const block = await prisma.block.findUnique({
+    where: { id: blockId },
+    select: { eventId: true },
+  });
+  if (!block || block.eventId !== eventId) {
+    return NextResponse.json({ error: "Блок не найден" }, { status: 404 });
+  }
+
   const body = await request.json();
 
   if (body.updateBlock) {
-    const block = await prisma.block.update({
+    const updated = await prisma.block.update({
       where: { id: blockId },
       data: {
         config: JSON.stringify(body.config),
       },
     });
-    return NextResponse.json(block);
+    return NextResponse.json(updated);
   }
 
   const { itemId, ...data } = body;
+
+  const existing = await prisma.blockItem.findUnique({
+    where: { id: itemId },
+    select: { blockId: true },
+  });
+  if (!existing || existing.blockId !== blockId) {
+    return NextResponse.json({ error: "Позиция не найдена" }, { status: 404 });
+  }
 
   const item = await prisma.blockItem.update({
     where: { id: itemId },
@@ -82,14 +103,21 @@ export async function DELETE(
   const { searchParams } = new URL(request.url);
   const itemId = searchParams.get("itemId");
 
-  if (!itemId) {
-    await prisma.block.delete({ where: { id: blockId } });
-    return NextResponse.json({ ok: true });
-  }
-
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Не авторизован" }, { status: 401 });
+  }
+
+  if (!itemId) {
+    const block = await prisma.block.findUnique({
+      where: { id: blockId },
+      select: { eventId: true },
+    });
+    if (!block || block.eventId !== eventId) {
+      return NextResponse.json({ error: "Блок не найден" }, { status: 404 });
+    }
+    await prisma.block.delete({ where: { id: blockId } });
+    return NextResponse.json({ ok: true });
   }
 
   const item = await prisma.blockItem.findUnique({

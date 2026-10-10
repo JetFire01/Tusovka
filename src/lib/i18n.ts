@@ -84,6 +84,7 @@ const translations = {
   "event.newEvent": { ru: "Новый ивент", en: "New event" },
   "event.createError": { ru: "Ошибка создания ивента", en: "Error creating event" },
   "event.deleteConfirm": { ru: "Введите ваш PIN-код для подтверждения удаления", en: "Enter your PIN code to confirm deletion" },
+  "event.deleteForbidden": { ru: "Удалить ивент может только его создатель", en: "Only the event creator can delete it" },
   "event.participants": { ru: "участн.", en: "members" },
   "event.addDescription": { ru: "Добавить описание", en: "Add description" },
 

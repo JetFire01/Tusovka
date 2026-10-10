@@ -222,3 +222,17 @@ export function formatDateRu(dateStr: string): string {
   const weekday = weekdays[date.getDay()];
   return `${day} ${month} ${year}г., ${weekday}`;
 }
+
+// Имя покупателя для отображения: актуальный ник по buyerUserId,
+// для старых данных — сохранённый buyerName как есть.
+export function buyerLabel(
+  participants: { user: { id: string; nickname: string } }[],
+  buyerUserId: unknown,
+  buyerName: unknown
+): string {
+  if (typeof buyerUserId === "string" && buyerUserId) {
+    const match = participants.find((p) => p.user.id === buyerUserId);
+    if (match) return match.user.nickname;
+  }
+  return typeof buyerName === "string" ? buyerName : "";
+}

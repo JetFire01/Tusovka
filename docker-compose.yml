@@ -7,7 +7,9 @@ services:
       - tusovka-data:/app/data
     environment:
       - DATABASE_URL=file:./data/tusovka.db
-      - JWT_SECRET=change-this-to-a-random-string
+      # Задайте JWT_SECRET в .env рядом с docker-compose.yml или в окружении —
+      # без него контейнер намеренно не стартует.
+      - JWT_SECRET=${JWT_SECRET:?Set JWT_SECRET to a long random string}
     restart: unless-stopped
 
 volumes:

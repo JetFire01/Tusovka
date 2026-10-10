@@ -8,6 +8,7 @@ import { Card, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import {
+  buyerLabel,
   formatDateRu,
   getAvailableMeals,
   getEventDayDates,
@@ -474,6 +475,7 @@ function BlockSurvey({
     return (
       <FoodBlockSurvey
         block={block}
+        participants={participants}
         response={response}
         onUpdate={onUpdate}
         onSaveResponse={onSaveResponse}
@@ -708,7 +710,8 @@ function BlockSurvey({
                   {data.cost !== undefined && data.cost !== "" && (
                     <p className="text-xs text-text-secondary">
                       {t("common.priceLabel", lang)} – {data.cost}
-                      {data.buyerName && ` (${data.buyerName})`}
+                      {buyerLabel(participants, data.buyerUserId, data.buyerName) &&
+                        ` (${buyerLabel(participants, data.buyerUserId, data.buyerName)})`}
                     </p>
                   )}
                   {bringClaims.length > 0 && (
@@ -762,8 +765,10 @@ function BlockSurvey({
                   {data.cost !== undefined && (
                     <span className="text-accent text-xs ml-2">{t("common.priceLabel", lang)} – {data.cost}</span>
                   )}
-                  {data.buyerName && (
-                    <span className="text-text-tertiary text-xs ml-1">({data.buyerName})</span>
+                  {buyerLabel(participants, data.buyerUserId, data.buyerName) && (
+                    <span className="text-text-tertiary text-xs ml-1">
+                      ({buyerLabel(participants, data.buyerUserId, data.buyerName)})
+                    </span>
                   )}
                 </div>
                 {myClaim ? (
@@ -851,8 +856,10 @@ function BlockSurvey({
                 {data.cost !== undefined && data.cost !== "" && (
                   <span className="text-accent ml-2">
                     {t("common.priceLabel", lang)} – {data.cost}
-                    {data.buyerName && (
-                      <span className="text-text-secondary"> ({data.buyerName})</span>
+                    {buyerLabel(participants, data.buyerUserId, data.buyerName) && (
+                      <span className="text-text-secondary">
+                        {" "}({buyerLabel(participants, data.buyerUserId, data.buyerName)})
+                      </span>
                     )}
                   </span>
                 )}
@@ -1055,11 +1062,13 @@ function AlcoholBlockSurvey({
 
 function FoodBlockSurvey({
   block,
+  participants,
   response,
   onUpdate,
   onSaveResponse,
 }: {
   block: BlockData;
+  participants: EventInfo["participants"];
   response: Record<string, unknown>;
   onUpdate: (key: string, value: unknown) => void;
   onSaveResponse: (blockId: string, response: Record<string, unknown>) => Promise<void>;
@@ -1126,8 +1135,10 @@ function FoodBlockSurvey({
                     {data.cost !== undefined && data.cost !== "" && (
                       <span className="text-accent ml-2">
                         {t("common.priceLabel", lang)} – {data.cost}
-                        {data.buyerName && (
-                          <span className="text-text-secondary"> ({data.buyerName})</span>
+                        {buyerLabel(participants, data.buyerUserId, data.buyerName) && (
+                          <span className="text-text-secondary">
+                            {" "}({buyerLabel(participants, data.buyerUserId, data.buyerName)})
+                          </span>
                         )}
                       </span>
                     )}

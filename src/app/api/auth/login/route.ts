@@ -1,14 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { hashPin, createToken } from "@/lib/auth";
+import { hashPin, createToken, AUTH_COOKIE, authCookieOptions } from "@/lib/auth";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
-  const body = await request.json();
+  const ip =
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  if (!rateLimit(`login:${ip}`, 10, 15 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: "Слишком много попыток входа, попробуйте позже" },
+      { status: 429 }
+    );
+  }
+
+  const body = await request.json().catch(() => ({}));
   const { pin } = body;
 
-  if (!pin) {
+  if (typeof pin !== "string" || !/^\d{4}$/.test(pin)) {
     return NextResponse.json(
-      { error: "Введите PIN-код" },
+      { error: "Введите PIN-код (4 цифры)" },
       { status: 400 }
     );
   }
@@ -34,12 +44,7 @@ export async function POST(request: NextRequest) {
     nickname: user.nickname,
   });
 
-  response.cookies.set("auth-token", token, {
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 30,
-    path: "/",
-  });
+  response.cookies.set(AUTH_COOKIE, token, authCookieOptions);
 
   return response;
 }

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import {
   BLOCK_TYPES,
   BlockType,
+  buyerLabel,
   formatDateRu,
   getAvailableMeals,
   getEventDayDates,
@@ -452,6 +453,7 @@ function BlockEditor({
                     key={item.id}
                     item={item}
                     data={data}
+                    participants={participants}
                     onEdit={() => setEditingItem({ blockId: block.id, item })}
                     onDelete={() => onDeleteItem(item.id)}
                   />
@@ -570,15 +572,19 @@ function DatePlaceEditor({
 function ItemDisplay({
   item,
   data,
+  participants,
   onEdit,
   onDelete,
 }: {
   item: ItemData;
   data: Record<string, string | number | boolean | undefined>;
+  participants: ParticipantInfo[];
   onEdit: () => void;
   onDelete: () => void;
 }) {
   const { lang } = useLang();
+  const buyer = buyerLabel(participants, data.buyerUserId, data.buyerName);
+  const fuelBuyer = buyerLabel(participants, data.fuelBuyerUserId, data.fuelBuyerName);
   return (
     <div className="flex items-center justify-between py-2 px-3 rounded-[8px] hover:bg-surface transition-colors group">
       <div className="flex-1">
@@ -609,16 +615,16 @@ function ItemDisplay({
         {data.cost !== undefined && data.cost !== "" && (
           <span className="text-accent text-sm ml-1">
             {t("common.priceLabel", lang)} – {String(data.cost)}
-            {data.buyerName && (
-              <span className="text-text-secondary"> ({String(data.buyerName)})</span>
+            {buyer && (
+              <span className="text-text-secondary"> ({buyer})</span>
             )}
           </span>
         )}
         {data.fuelCost !== undefined && data.fuelCost !== "" && (
           <span className="text-accent text-sm ml-1">
             {t("common.fuelLabel", lang)} – {String(data.fuelCost)}
-            {data.fuelBuyerName && (
-              <span className="text-text-secondary"> ({String(data.fuelBuyerName)})</span>
+            {fuelBuyer && (
+              <span className="text-text-secondary"> ({fuelBuyer})</span>
             )}
           </span>
         )}
@@ -649,6 +655,21 @@ function ItemDisplay({
   );
 }
 
+// Начальное значение селекта покупателя: сохранённый userId,
+// для старых данных — поиск участника по сохранённому нику.
+function resolveBuyerUserId(
+  participants: ParticipantInfo[],
+  userId: unknown,
+  nickname: unknown
+): string {
+  if (typeof userId === "string" && userId) return userId;
+  if (typeof nickname === "string" && nickname) {
+    const match = participants.find((p) => p.user.nickname === nickname);
+    if (match) return match.user.id;
+  }
+  return "";
+}
+
 function ItemForm({
   blockType,
   participants,
@@ -676,9 +697,13 @@ function ItemForm({
   const [source, setSource] = useState((initial?.source as string) || "");
   const [notes, setNotes] = useState((initial?.notes as string) || "");
   const [cost, setCost] = useState(initial?.cost?.toString() || "");
-  const [buyerName, setBuyerName] = useState((initial?.buyerName as string) || "");
+  const [buyerUserId, setBuyerUserId] = useState(() =>
+    resolveBuyerUserId(participants, initial?.buyerUserId, initial?.buyerName)
+  );
   const [fuelCost, setFuelCost] = useState(initial?.fuelCost?.toString() || "");
-  const [fuelBuyerName, setFuelBuyerName] = useState((initial?.fuelBuyerName as string) || "");
+  const [fuelBuyerUserId, setFuelBuyerUserId] = useState(() =>
+    resolveBuyerUserId(participants, initial?.fuelBuyerUserId, initial?.fuelBuyerName)
+  );
   const [totalSeats, setTotalSeats] = useState(initial?.totalSeats?.toString() || "");
   const [departureDate, setDepartureDate] = useState((initial?.departureDate as string) || "");
   const [forEveryone, setForEveryone] = useState((initial?.forEveryone as boolean) || false);
@@ -752,13 +777,36 @@ function ItemForm({
     if (source) data.source = source;
     if (notes) data.notes = notes;
 
+    // Записывает buyerUserId как идентификатор и buyerName как снимок ника
+    // (для отображения и обратной совместимости). Если выбора нет, а старая
+    // позиция хранила покупателя, не найденного среди участников, — сохраняет
+    // прежние поля, чтобы правка других полей не стирала покупателя.
+    function applyBuyer(
+      idKey: "buyerUserId" | "fuelBuyerUserId",
+      nameKey: "buyerName" | "fuelBuyerName",
+      selectedId: string
+    ) {
+      const selected = participants.find((p) => p.user.id === selectedId);
+      if (selected) {
+        data[idKey] = selected.user.id;
+        data[nameKey] = selected.user.nickname;
+        return;
+      }
+      if (typeof initial?.[nameKey] === "string" && initial[nameKey]) {
+        data[nameKey] = initial[nameKey];
+        if (typeof initial?.[idKey] === "string" && initial[idKey]) {
+          data[idKey] = initial[idKey];
+        }
+      }
+    }
+
     // Equipment fields
     if (blockType === "equipment") {
       data.itemMode = equipmentMode || initial?.itemMode || "bring";
       data.forEveryone = forEveryone;
       if (equipmentMode === "buy" || initial?.itemMode === "buy") {
         if (cost) data.cost = parseFloat(cost);
-        if (buyerName) data.buyerName = buyerName;
+        applyBuyer("buyerUserId", "buyerName", buyerUserId);
       }
     }
 
@@ -769,21 +817,16 @@ function ItemForm({
         if (totalSeats) data.totalSeats = parseInt(totalSeats);
         if (departureDate) data.departureDate = departureDate;
         if (fuelCost) data.fuelCost = parseFloat(fuelCost);
-        if (fuelBuyerName) data.fuelBuyerName = fuelBuyerName;
+        applyBuyer("fuelBuyerUserId", "fuelBuyerName", fuelBuyerUserId);
         data.sharedFuel = sharedFuel;
         data.driverPays = driverPays;
       }
     }
 
     // Cost fields for alcohol, pyrotechnics, film, custom, food
-    if (["alcohol", "pyrotechnics", "film", "custom"].includes(blockType)) {
+    if (["alcohol", "pyrotechnics", "film", "custom", "food", "day_food"].includes(blockType)) {
       if (cost) data.cost = parseFloat(cost);
-      if (buyerName) data.buyerName = buyerName;
-    }
-
-    if (["food", "day_food"].includes(blockType)) {
-      if (cost) data.cost = parseFloat(cost);
-      if (buyerName) data.buyerName = buyerName;
+      applyBuyer("buyerUserId", "buyerName", buyerUserId);
     }
 
     onSave(name.trim(), data);
@@ -795,7 +838,6 @@ function ItemForm({
   const showSource = ["food", "day_food"].includes(blockType);
   const showCostAndBuyer = ["alcohol", "pyrotechnics", "film", "custom", "food", "day_food"].includes(blockType) || isEquipmentBuy;
 
-  const participantOptions = participants.map((p) => p.user.nickname);
 
   return (
     <form
@@ -860,13 +902,13 @@ function ItemForm({
             />
             <div className="flex flex-col gap-1.5">
               <select
-                value={buyerName}
-                onChange={(e) => setBuyerName(e.target.value)}
+                value={buyerUserId}
+                onChange={(e) => setBuyerUserId(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
               >
                 <option value="">{t("form.whoBought", lang)}</option>
-                {participantOptions.map((name) => (
-                  <option key={name} value={name}>{name}</option>
+                {participants.map((p) => (
+                  <option key={p.user.id} value={p.user.id}>{p.user.nickname}</option>
                 ))}
               </select>
             </div>
@@ -897,13 +939,13 @@ function ItemForm({
             />
             <div className="flex flex-col gap-1.5">
               <select
-                value={fuelBuyerName}
-                onChange={(e) => setFuelBuyerName(e.target.value)}
+                value={fuelBuyerUserId}
+                onChange={(e) => setFuelBuyerUserId(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-surface-card border border-border rounded-[var(--radius-apple)] text-text-primary transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent"
               >
                 <option value="">{t("form.whoPaidFuel", lang)}</option>
-                {participantOptions.map((name) => (
-                  <option key={name} value={name}>{name}</option>
+                {participants.map((p) => (
+                  <option key={p.user.id} value={p.user.id}>{p.user.nickname}</option>
                 ))}
               </select>
             </div>
